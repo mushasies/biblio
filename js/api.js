@@ -44,11 +44,22 @@ const api = {
 
   // Consultar la API de Google Books
   async fetchFromGoogleBooks(isbn) {
-    const url = `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`;
-    const response = await fetch(url);
+    // Intentamos primero una búsqueda estricta por ISBN
+    let url = `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`;
+    let response = await fetch(url);
     if (!response.ok) throw new Error('Google Books API respondió con un error');
     
-    const data = await response.json();
+    let data = await response.json();
+    
+    // Si no hay resultados estrictos, intentamos una búsqueda general por el número
+    if (!data.items || data.items.length === 0) {
+      url = `https://www.googleapis.com/books/v1/volumes?q=${isbn}`;
+      response = await fetch(url);
+      if (response.ok) {
+        data = await response.json();
+      }
+    }
+
     if (!data.items || data.items.length === 0) return null;
 
     const info = data.items[0].volumeInfo;
