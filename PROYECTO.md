@@ -1,1 +1,0 @@
-# Descripción de reglas de proyecto
