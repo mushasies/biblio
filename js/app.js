@@ -1,28 +1,34 @@
 const app = {
   books: [],
   currentPhotos: [], // Almacén temporal de fotos Base64 en el formulario actual
+  isAuthenticated: false, // Estado de autenticación
+  user: null, // Datos del usuario autenticado
 
   // Inicializar la aplicación
   async init() {
     console.log('Iniciando Biblio App...');
     
-    // 1. Inicializar Base de Datos
-    try {
-      await storage.init();
-      await this.loadAndRenderBooks();
-    } catch (err) {
-      console.error('Error al iniciar storage/libros:', err);
-    }
+    // 1. Inicializar Base de Datos (IndexedDB siempre para caché)
+    await storage.init();
 
-    // 2. Registrar Service Worker para soporte PWA y Offline
-    this.registerServiceWorker();
-
-    // 3. Configurar eventos de búsqueda y filtros
+    // 2. Configurar eventos de búsqueda y filtros
     document.getElementById('search-input')?.addEventListener('input', () => this.filterAndRenderBooks());
     document.getElementById('sort-select')?.addEventListener('change', () => this.filterAndRenderBooks());
 
-    // 4. Inicializar iconos visuales de Lucide
+    // 3. Inicializar iconos visuales de Lucide
     this.refreshIcons();
+
+    // 4. Configurar manejadores de formularios de autenticación
+    document.getElementById("supabase-config-form")?.addEventListener("submit", (e) => this.handleSupabaseConfig(e));
+    document.getElementById("login-form")?.addEventListener("submit", (e) => this.handleLogin(e));
+    document.getElementById("signup-form")?.addEventListener("submit", (e) => this.handleSignup(e));
+    document.getElementById("btn-logout")?.addEventListener("click", () => this.handleLogout());
+
+    // 5. Inicializar Supabase y comprobar sesión
+    await auth.initSupabase(); // Esto disparará handleAuthChange de forma reactiva
+
+    // 6. Registrar Service Worker para soporte PWA y Offline
+    this.registerServiceWorker();
   },
 
   // Registrar el Service Worker
@@ -31,7 +37,7 @@ const app = {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js')
           .then((reg) => console.log('Service Worker registrado correctamente.', reg.scope))
-          .catch((err) => console.warn('Error al registrar el Service Worker:', err));
+          .catch((err) => console.warn('Error al registrar le Service Worker:', err));
       });
     }
   },
@@ -43,10 +49,54 @@ const app = {
     }
   },
 
-  // Cargar libros desde storage y renderizar la interfaz
+  // Manejar cambios en el estado de autenticación de Supabase
+  async handleAuthChange(user) {
+    this.user = user;
+    this.isAuthenticated = !!user;
+    storage.isSupabaseEnabled = !!user; // Habilitar Supabase en storage si hay usuario
+
+    const appContent = document.getElementById("app-content");
+    const authModal = document.getElementById("auth-modal");
+    const supabaseConfigModal = document.getElementById("supabase-config-modal");
+
+    if (user) {
+      console.log("Usuario autenticado:", user.email);
+      // Ocultar modals de auth/config y mostrar app principal
+      if (authModal) authModal.classList.add("hidden");
+      if (supabaseConfigModal) supabaseConfigModal.classList.add("hidden");
+      if (appContent) appContent.classList.remove("hidden");
+      // Cargar y renderizar libros del usuario
+      await this.loadAndRenderBooks();
+    } else {
+      console.log("Usuario desautenticado o no hay sesión.");
+      // Ocultar app principal y mostrar modal de autenticación si Supabase está configurado
+      if (appContent) appContent.classList.add("hidden");
+      
+      const hasUrl = localStorage.getItem("supabaseUrl");
+      const hasKey = localStorage.getItem("supabaseAnonKey");
+
+      if (hasUrl && hasKey) {
+        if (authModal) this.showAuthModal("login");
+      } else {
+        this.showSupabaseConfigModal();
+      }
+      this.books = []; // Limpiar libros al cerrar sesión
+      this.filterAndRenderBooks(); // Renderizar con 0 libros
+    }
+    this.refreshIcons(); // Asegurarse de que los iconos se actualicen
+  },
+
+  // Cargar libros desde storage y renderizar la interfaz (ahora considera Supabase)
   async loadAndRenderBooks() {
-    this.books = await storage.getAllBooks();
-    this.filterAndRenderBooks();
+    try {
+      this.books = await storage.getAllBooks();
+      this.filterAndRenderBooks();
+    } catch (error) {
+      console.error("Error al cargar libros:", error);
+      alert("Hubo un error al cargar tus libros.");
+      this.books = [];
+      this.filterAndRenderBooks();
+    }
   },
 
   // Calcular estadísticas de la colección y mostrarlas
@@ -178,8 +228,134 @@ const app = {
     }
   },
 
+  // Mostrar modal de configuración de Supabase
+  showSupabaseConfigModal() {
+    const modal = document.getElementById("supabase-config-modal");
+    if (modal) {
+      modal.classList.remove("hidden");
+      // Cargar valores existentes si los hay
+      document.getElementById("supabase-url-input").value = localStorage.getItem("supabaseUrl") || "";
+      document.getElementById("supabase-anon-key-input").value = localStorage.getItem("supabaseAnonKey") || "";
+    }
+  },
+
+  // Cerrar modal de configuración de Supabase
+  closeSupabaseConfigModal() {
+    const modal = document.getElementById("supabase-config-modal");
+    if (modal) modal.classList.add("hidden");
+  },
+
+  // Guardar configuración de Supabase
+  handleSupabaseConfig(event) {
+    event.preventDefault();
+    const url = document.getElementById("supabase-url-input").value.trim();
+    const key = document.getElementById("supabase-anon-key-input").value.trim();
+    
+    if (url && key) {
+      localStorage.setItem("supabaseUrl", url);
+      localStorage.setItem("supabaseAnonKey", key);
+      this.closeSupabaseConfigModal();
+      auth.initSupabase(); // Re-inicializar Supabase con las nuevas claves
+    } else {
+      alert("Por favor, introduce tanto la URL como la Clave Anon de Supabase.");
+    }
+  },
+
+  // Mostrar modal de autenticación
+  showAuthModal(tab = "login") {
+    const modal = document.getElementById("auth-modal");
+    if (modal) {
+      modal.classList.remove("hidden");
+      this.switchAuthTab(tab);
+    }
+  },
+
+  // Cerrar modal de autenticación
+  closeAuthModal() {
+    const modal = document.getElementById("auth-modal");
+    if (modal) modal.classList.add("hidden");
+  },
+
+  // Cambiar entre pestañas de Login/Registro
+  switchAuthTab(tab) {
+    const btnLogin = document.getElementById("auth-tab-btn-login");
+    const btnSignup = document.getElementById("auth-tab-btn-signup");
+    const contentLogin = document.getElementById("auth-tab-content-login");
+    const contentSignup = document.getElementById("auth-tab-content-signup");
+
+    if (tab === "login") {
+      btnLogin?.classList.add("border-primary-500", "text-primary-600");
+      btnLogin?.classList.remove("border-transparent", "text-slate-500", "hover:text-slate-800");
+      btnSignup?.classList.add("border-transparent", "text-slate-500", "hover:text-slate-800");
+      btnSignup?.classList.remove("border-primary-500", "text-primary-600");
+      contentLogin?.classList.add("active");
+      contentSignup?.classList.remove("active");
+    } else {
+      btnSignup?.classList.add("border-primary-500", "text-primary-600");
+      btnSignup?.classList.remove("border-transparent", "text-slate-500", "hover:text-slate-800");
+      btnLogin?.classList.add("border-transparent", "text-slate-500", "hover:text-slate-800");
+      btnLogin?.classList.remove("border-primary-500", "text-primary-600");
+      contentSignup?.classList.add("active");
+      contentLogin?.classList.remove("active");
+    }
+    this.refreshIcons();
+  },
+
+  // Manejar Login de usuario
+  async handleLogin(event) {
+    event.preventDefault();
+    const email = document.getElementById("login-email").value;
+    const password = document.getElementById("login-password").value;
+    try {
+      await auth.signIn(email, password);
+    } catch (error) {
+      alert("Error al iniciar sesión: " + error.message);
+      console.error("Error login:", error);
+    }
+  },
+
+  // Manejar Registro de usuario
+  async handleSignup(event) {
+    event.preventDefault();
+    const email = document.getElementById("signup-email").value;
+    const password = document.getElementById("signup-password").value;
+    try {
+      await auth.signUp(email, password);
+    } catch (error) {
+      alert("Error en el registro: " + error.message);
+      console.error("Error signup:", error);
+    }
+  },
+
+  // Iniciar sesión con Google
+  async signInWithGoogle() {
+    try {
+      await auth.signInWithGoogle();
+    } catch (error) {
+      alert("Error al conectar con Google: " + error.message);
+      console.error("Error Google login:", error);
+    }
+  },
+
+  // Cerrar sesión
+  async handleLogout() {
+    if (confirm("¿Estás seguro de que quieres cerrar sesión?")) {
+      try {
+        await auth.signOut();
+      } catch (error) {
+        alert("Error al cerrar sesión: " + error.message);
+        console.error("Error logout:", error);
+      }
+    }
+  },
+
   // Abrir modal de añadir libro
   showAddBookModal(tab = 'scan') {
+    if (!this.isAuthenticated) {
+      alert("Debes iniciar sesión para añadir libros.");
+      this.showAuthModal("login");
+      return;
+    }
     const modal = document.getElementById('add-book-modal');
     if (modal) {
       modal.classList.remove('hidden');
@@ -527,8 +703,3 @@ const app = {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 };
-
-// Arrancar la app cuando el DOM esté listo
-document.addEventListener('DOMContentLoaded', () => {
-  app.init();
-});
