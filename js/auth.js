@@ -1,4 +1,4 @@
-let supabase = null;
+let supabaseClient = null;
 let currentSession = null;
 
 const auth = {
@@ -9,18 +9,18 @@ const auth = {
 
         if (supabaseUrl && supabaseAnonKey) {
             try {
-                supabase = Supabase.createClient(supabaseUrl, supabaseAnonKey);
+                supabaseClient = Supabase.createClient(supabaseUrl, supabaseAnonKey);
                 console.log('Supabase client inicializado.');
 
                 // Escuchar cambios de autenticación
-                supabase.auth.onAuthStateChange((event, session) => {
+                supabaseClient.auth.onAuthStateChange((event, session) => {
                     console.log('Auth state changed:', event, session);
                     currentSession = session;
                     app.handleAuthChange(session?.user);
                 });
 
                 // Comprobar la sesión actual al inicio
-                const { data, error } = await supabase.auth.getSession();
+                const { data, error } = await supabaseClient.auth.getSession();
                 if (error) throw error;
                 currentSession = data.session;
                 app.handleAuthChange(data.session?.user);
@@ -40,24 +40,24 @@ const auth = {
 
     // Iniciar sesión con email y contraseña
     async signIn(email, password) {
-        if (!supabase) throw new Error('Supabase no inicializado.');
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (!supabaseClient) throw new Error('Supabase no inicializado.');
+        const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
         if (error) throw error;
         console.log('Sesión iniciada con éxito.');
     },
 
     // Registrar nuevo usuario con email y contraseña
     async signUp(email, password) {
-        if (!supabase) throw new Error('Supabase no inicializado.');
-        const { error } = await supabase.auth.signUp({ email, password });
+        if (!supabaseClient) throw new Error('Supabase no inicializado.');
+        const { error } = await supabaseClient.auth.signUp({ email, password });
         if (error) throw error;
         alert('¡Registro exitoso! Por favor, verifica tu email para activar tu cuenta.');
     },
 
     // Iniciar sesión con Google
     async signInWithGoogle() {
-        if (!supabase) throw new Error('Supabase no inicializado.');
-        const { error } = await supabase.auth.signInWithOAuth({
+        if (!supabaseClient) throw new Error('Supabase no inicializado.');
+        const { error } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
             options: { redirectTo: window.location.origin } // Redirigir a la URL actual después del login
         });
@@ -66,8 +66,8 @@ const auth = {
 
     // Cerrar sesión
     async signOut() {
-        if (!supabase) throw new Error('Supabase no inicializado.');
-        const { error } = await supabase.auth.signOut();
+        if (!supabaseClient) throw new Error('Supabase no inicializado.');
+        const { error } = await supabaseClient.auth.signOut();
         if (error) throw error;
         console.log('Sesión cerrada.');
     },
@@ -84,8 +84,8 @@ const auth = {
 
     // Función para realizar consultas a la base de datos de Supabase
     async from(tableName) {
-        if (!supabase) throw new Error('Supabase no inicializado o no configurado.');
+        if (!supabaseClient) throw new Error('Supabase no inicializado o no configurado.');
         if (!currentSession?.user) throw new Error('Usuario no autenticado.');
-        return supabase.from(tableName);
+        return supabaseClient.from(tableName);
     }
 };
