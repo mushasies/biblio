@@ -496,16 +496,19 @@ showAppBody();
 // Refrescar iconos Lucide al cargar la página
 lucide.createIcons();
 
-// Inicializar la aplicación
-document.addEventListener("DOMContentLoaded", () => {
+// Inicializar la aplicación (usar 'load' para esperar a que todos los scripts se carguen)
+window.addEventListener("load", async () => {
 const splash = document.getElementById("loading-splash");
 if (splash) {
 splash.classList.remove("hidden");
 }
-
-// Inicializar la app directamente (el evento supabaseReady se maneja internamente)
+try {
 await app.init();
+} catch (error) {
+console.error('Error al iniciar la app:', error);
+} finally {
 hideSplashScreen();
+}
 });
 </script>
 </body>
