@@ -36,6 +36,9 @@ const auth = {
             console.log('Supabase no configurado. Mostrando modal de configuración.');
             app.showSupabaseConfigModal();
         }
+        // Siempre anunciar que Supabase está listo (incluso si no está configurado,
+        // para que la app pueda mostrar el modal de configuración)
+        document.dispatchEvent(new Event('supabaseReady'));
     },
 
     // Iniciar sesión con email y contraseña

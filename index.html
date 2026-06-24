@@ -503,11 +503,9 @@ if (splash) {
 splash.classList.remove("hidden");
 }
 
-// Asegurarse de que `app.init()` se llame después de que Supabase esté listo
-document.addEventListener("supabaseReady", async () => {
+// Inicializar la app directamente (el evento supabaseReady se maneja internamente)
 await app.init();
 hideSplashScreen();
-});
 });
 </script>
 </body>
