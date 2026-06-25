@@ -316,6 +316,6 @@ const users = {
 // Inicializar bcrypt si ya está cargado
 if (typeof bcrypt === 'undefined') {
   const bcryptScript = document.createElement('script');
-  bcryptScript.src = 'https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js';
+  bcryptScript.src = 'https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js';  
   document.head.appendChild(bcryptScript);
 }
