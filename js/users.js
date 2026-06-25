@@ -278,7 +278,7 @@ const users = {
     if (typeof bcrypt === 'undefined') {
       await new Promise((resolve) => {
         const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/bcrypt.js/2.4.0/bcrypt.min.js';
+        script.src = 'https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js';
         script.onload = resolve;
         script.onerror = () => resolve(); // Si falla, continuamos igual
         document.head.appendChild(script);
@@ -302,7 +302,7 @@ const users = {
       // Si bcrypt no está cargado, intentar cargarlo
       await new Promise((resolve) => {
         const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/bcrypt.js/2.4.0/bcrypt.min.js';
+        script.src = 'https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js';
         script.onload = resolve;
         script.onerror = () => resolve();
         document.head.appendChild(script);
@@ -316,6 +316,6 @@ const users = {
 // Inicializar bcrypt si ya está cargado
 if (typeof bcrypt === 'undefined') {
   const bcryptScript = document.createElement('script');
-  bcryptScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/bcrypt.js/2.4.0/bcrypt.min.js';
+  bcryptScript.src = 'https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js';
   document.head.appendChild(bcryptScript);
 }
