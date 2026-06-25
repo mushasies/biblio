@@ -44,7 +44,47 @@ const auth = {
                 return;
             }
             
-            supabaseClient = window.Supabase.createClient(supabaseUrl, keyToUse);
+            // Esperar a que el evento supabaseReady se dispare (desde index.html)
+            // Esto garantiza que Supabase esté completamente cargado
+            if (typeof window.supabase === 'undefined' || typeof window.supabase.createClient !== 'function') {
+                await new Promise((resolve) => {
+                    const maxWait = 15000; // 15 segundos máximo
+                    const startTime = Date.now();
+                    
+                    const checkInterval = setInterval(() => {
+                        const elapsed = Date.now() - startTime;
+                        
+                        // Verificar si Supabase está disponible
+                        if (typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function') {
+                            clearInterval(checkInterval);
+                            resolve();
+                            return;
+                        }
+                        
+                        // Verificar si el evento ya fue disparado
+                        if (elapsed >= maxWait) {
+                            clearInterval(checkInterval);
+                            resolve(); // Continuar de todos modos después del timeout
+                        }
+                    }, 100);
+                    
+                    // También escuchar el evento por si acaso
+                    const handler = () => {
+                        clearInterval(checkInterval);
+                        resolve();
+                    };
+                    document.addEventListener('supabaseReady', handler);
+                });
+            }
+            
+            // Verificar que createClient existe (última verificación)
+            if (typeof window.supabase === 'undefined' || typeof window.supabase.createClient !== 'function') {
+                console.error('ERROR: window.supabase no está disponible o no tiene createClient');
+                console.error('Tipo de window.supabase:', typeof window.supabase);
+                throw new Error('La librería Supabase no se cargó correctamente. Verifica tu conexión a internet y recarga la página.');
+            }
+            
+            supabaseClient = window.supabase.createClient(supabaseUrl, keyToUse);
             console.log('Supabase client inicializado con', supabaseServiceKey ? 'SERVICE KEY' : 'ANON KEY');
             
             // Inicializar el módulo de usuarios con el cliente Supabase

@@ -5,17 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Biblio - Gestor de Libros Personal</title>
 
-
-<!-- Cargar Supabase primero y de forma bloqueante -->
-  <script>
-    // Cargar Supabase de forma síncrona
-    document.write('<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"><\/script>');
-    // Verificar que se cargó
-    if (typeof window.Supabase === 'undefined') {
-      throw new Error('Supabase no se cargó. Verifica tu conexión a internet.');
-    }
-  </script>
-
 <!-- Tailwind CSS -->
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -36,7 +25,43 @@ primary: {
 }
 </script>
 
-
+<!-- Supabase - Carga y verificación -->
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+  // Verificar que Supabase se cargó correctamente y disparar evento
+  (function checkSupabase() {
+    var interval = setInterval(function() {
+      // Verificar diferentes formas en que Supabase podría estar disponible
+      if (typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function') {
+        clearInterval(interval);
+        console.log('✓ Supabase cargado correctamente (window.supabase)');
+        document.dispatchEvent(new Event('supabaseReady'));
+        return;
+      }
+      
+      if (typeof Supabase !== 'undefined' && typeof Supabase.createClient === 'function') {
+        clearInterval(interval);
+        console.log('✓ Supabase cargado correctamente (Supabase mayúscula)');
+        window.supabase = Supabase; // Asegurar que también esté disponible como minúscula
+        document.dispatchEvent(new Event('supabaseReady'));
+        return;
+      }
+      
+      // Si no está disponible después de 5 segundos, mostrar error
+      // (el script ya se cargó, así que esto solo es por si hay problemas de red)
+    }, 100);
+    
+    // Timeout de seguridad: 10 segundos
+    setTimeout(function() {
+      clearInterval(interval);
+      if (typeof window.supabase === 'undefined' || typeof window.supabase.createClient !== 'function') {
+        console.error('ERROR: Supabase no se cargó después de 10 segundos.');
+        console.error('Tipo de window.supabase:', typeof window.supabase);
+        alert('Error crítico: La librería Supabase no se cargó correctamente. Verifica tu conexión a internet y recarga la página.');
+      }
+    }, 10000);
+  })();
+</script>
 
 <!-- Lucide Icons (para iconos bonitos y sencillos) -->
 <script src="https://unpkg.com/lucide@latest"></script>
@@ -606,42 +631,71 @@ Registrarse
 <script>
 // Mostrar el cuerpo de la app una vez que todo esté listo
 function showAppBody() {
-const body = document.querySelector('body');
-if (body) {
-body.style.opacity = '1';
-body.style.transition = 'opacity 0.3s ease';
-}
+  const body = document.querySelector('body');
+  if (body) {
+    body.style.opacity = '1';
+    body.style.transition = 'opacity 0.3s ease';
+  }
 }
 
 // Ocultar splash screen y mostrar la app una vez que todo esté cargado
 function hideSplashScreen() {
-const splash = document.getElementById("loading-splash");
-if (splash) {
-splash.style.opacity = "0";
-setTimeout(() => {
-splash.classList.add("hidden");
-showAppBody();
-}, 500); // Coincide con la duración de la transición
-}
+  const splash = document.getElementById("loading-splash");
+  if (splash) {
+    splash.style.opacity = "0";
+    setTimeout(() => {
+      splash.classList.add("hidden");
+      showAppBody();
+    }, 500); // Coincide con la duración de la transición
+  }
 }
 
 // Refrescar iconos Lucide al cargar la página
-lucide.createIcons();
+function refreshLucide() {
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
+}
 
-// Inicializar la aplicación (usar 'load' para esperar a que todos los scripts se carguen)
-window.addEventListener("load", async () => {
-const splash = document.getElementById("loading-splash");
-if (splash) {
-splash.classList.remove("hidden");
+// Inicializar la aplicación
+async function initApp() {
+  const splash = document.getElementById("loading-splash");
+  if (splash) {
+    splash.classList.remove("hidden");
+  }
+  
+  try {
+    // Esperar a que app esté disponible (los scripts se cargaron de forma normal en el body)
+    if (typeof app === 'undefined' || typeof app.init !== 'function') {
+      // Si app no está disponible, esperar un poco
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    // Verificar nuevamente
+    if (typeof app === 'undefined' || typeof app.init !== 'function') {
+      console.error('El módulo app no está disponible.');
+      hideSplashScreen();
+      return;
+    }
+    
+    await app.init();
+    hideSplashScreen();
+  } catch (error) {
+    console.error('Error al iniciar la app:', error);
+    hideSplashScreen();
+  }
 }
-try {
-await app.init();
-} catch (error) {
-console.error('Error al iniciar la app:', error);
-} finally {
-hideSplashScreen();
+
+// Esperar a que el DOM esté listo y luego inicializar la app
+// Los scripts ya se cargaron de forma estática en el body
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function() {
+    // Dar un tiempo para que los scripts se ejecuten
+    setTimeout(initApp, 1000);
+  });
+} else {
+  setTimeout(initApp, 1000);
 }
-});
 </script>
 </body>
 </html>
