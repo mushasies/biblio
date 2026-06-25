@@ -9,7 +9,7 @@ const api = {
   async lookupBook(isbn) {
     const cleaned = this.cleanISBN(isbn);
     if (!cleaned) {
-      throw new Error('El ISBN provisto no es válido.');
+      throw new Error('El ISBN provisto no es válido.'); 
     }
 
     console.log(`Buscando ISBN: ${cleaned} en APIs externas...`);
