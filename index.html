@@ -6,8 +6,15 @@
 <title>Biblio - Gestor de Libros Personal</title>
 
 
-<!-- Supabase - DEBE CARGARSE ANTES DE CUALQUIER SCRIPT QUE LO USE -->
-<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<!-- Cargar Supabase primero y de forma bloqueante -->
+  <script>
+    // Cargar Supabase de forma síncrona
+    document.write('<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"><\/script>');
+    // Verificar que se cargó
+    if (typeof window.Supabase === 'undefined') {
+      throw new Error('Supabase no se cargó. Verifica tu conexión a internet.');
+    }
+  </script>
 
 <!-- Tailwind CSS -->
 <script src="https://cdn.tailwindcss.com"></script>
