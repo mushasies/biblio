@@ -129,7 +129,7 @@ const auth = {
     },
     
     // Obtener el usuario actual
-    getUser() {
+    getUser() { 
         return users.getCurrentUser();
     },
     
