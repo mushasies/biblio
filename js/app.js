@@ -71,16 +71,26 @@ const app = {
       await this.loadAndRenderBooks();
     } else {
       console.log("Usuario desautenticado o no hay sesión.");
-      // Ocultar app principal y mostrar modal de autenticación si Supabase está configurado
-      if (appContent) appContent.classList.add("hidden");
       
       const hasUrl = localStorage.getItem("supabaseUrl");
       const hasKey = localStorage.getItem("supabaseAnonKey") || localStorage.getItem("supabaseServiceKey");
-
+      
       if (hasUrl && hasKey) {
-        if (authModal) this.showAuthModal("login");
+        // Si Supabase está configurado pero no hay usuario autenticado,
+        // mostrar modal de autenticación (Registro si es primer uso)
+        const hasSession = localStorage.getItem('biblio_user');
+        if (authModal) this.showAuthModal(hasSession ? "login" : "signup");
+        if (appContent) appContent.classList.add("hidden");
       } else {
-        this.showSupabaseConfigModal();
+        // Si NO hay Supabase configurado, permitir usar la app con IndexedDB local
+        if (authModal) authModal.classList.add("hidden");
+        if (supabaseConfigModal) {
+          // Mostrar modal de configuración solo si no está visible
+          supabaseConfigModal.classList.remove("hidden");
+        }
+        if (appContent) appContent.classList.remove("hidden");
+        // Cargar libros desde IndexedDB
+        await this.loadAndRenderBooks();
       }
       this.books = []; // Limpiar libros al cerrar sesión
       this.filterAndRenderBooks(); // Renderizar con 0 libros
@@ -289,6 +299,8 @@ const app = {
     const contentLogin = document.getElementById("auth-tab-content-login");
     const contentSignup = document.getElementById("auth-tab-content-signup");
 
+    const title = document.querySelector("#auth-modal h3");
+    
     if (tab === "login") {
       btnLogin?.classList.add("border-primary-500", "text-primary-600");
       btnLogin?.classList.remove("border-transparent", "text-slate-500", "hover:text-slate-800");
@@ -296,6 +308,7 @@ const app = {
       btnSignup?.classList.remove("border-primary-500", "text-primary-600");
       contentLogin?.classList.add("active");
       contentSignup?.classList.remove("active");
+      if (title) title.textContent = "Iniciar Sesión";
     } else {
       btnSignup?.classList.add("border-primary-500", "text-primary-600");
       btnSignup?.classList.remove("border-transparent", "text-slate-500", "hover:text-slate-800");
@@ -303,6 +316,7 @@ const app = {
       btnLogin?.classList.remove("border-primary-500", "text-primary-600");
       contentSignup?.classList.add("active");
       contentLogin?.classList.remove("active");
+      if (title) title.textContent = "Registrarse";
     }
     this.refreshIcons();
   },

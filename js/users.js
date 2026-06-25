@@ -20,6 +20,7 @@ const users = {
   init(supabaseClient) {
     this.supabaseClient = supabaseClient;
     console.log('Users module initialized');
+    console.log('NOTA: Asegúrate de que la tabla "users" en Supabase tenga los campos: id, email, password_hash, role');
   },
   
   /**
@@ -43,11 +44,32 @@ const users = {
       // Hashear la contraseña
       const passwordHash = await this.hashPassword(password);
       
-      // Insertar usuario en Supabase
+      // Verificar si es el primer usuario (para asignar rol admin)
+      let isFirstUser = false;
+      try {
+        const { data: existingUsers, error: countError } = await this.supabaseClient
+          .from('users')
+          .select('id')
+          .limit(1);
+        
+        if (!countError) {
+          isFirstUser = !existingUsers || existingUsers.length === 0;
+        }
+      } catch (err) {
+        console.warn('No se pudo verificar si hay usuarios existentes, asumiendo que no es el primero:', err);
+        // Si hay error al contar, asumimos que no es el primero por seguridad
+        isFirstUser = false;
+      }
+      
+      // Insertar usuario en Supabase con el rol adecuado
       const { data, error } = await this.supabaseClient
         .from('users')
         .insert([
-          { email, password_hash: passwordHash }
+          { 
+            email, 
+            password_hash: passwordHash,
+            role: isFirstUser ? 'admin' : 'user'
+          }
         ])
         .select();
       
@@ -64,14 +86,14 @@ const users = {
       }
       
       const newUser = data[0];
-      console.log('Usuario registrado:', newUser);
+      console.log('Usuario registrado:', newUser, '(Rol:', isFirstUser ? 'ADMIN' : 'USER', ')');
       
       return { 
         success: true, 
         user: { 
           id: newUser.id, 
           email: newUser.email,
-          role: newUser.role || 'user'
+          role: newUser.role || (isFirstUser ? 'admin' : 'user')
         } 
       };
       
