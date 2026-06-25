@@ -4,6 +4,25 @@ let currentSession = null;
 const auth = {
     // Inicializa el cliente Supabase y maneja la sesión
     async initSupabase() {
+        // Verificar si Supabase está definido, si no, cargarlo dinámicamente
+        if (typeof Supabase === 'undefined') {
+            console.log('Supabase no está definido. Cargando dinámicamente...');
+            await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/@supabase/supabase-js@1/dist/umd/supabase.js';
+                script.onload = () => {
+                    if (typeof Supabase !== 'undefined') {
+                        console.log('Supabase cargado correctamente');
+                        resolve();
+                    } else {
+                        reject(new Error('Supabase no se definió después de cargar el script'));
+                    }
+                };
+                script.onerror = () => reject(new Error('Error al cargar Supabase'));
+                document.head.appendChild(script);
+            });
+        }
+
         const supabaseUrl = localStorage.getItem('supabaseUrl');
         const supabaseAnonKey = localStorage.getItem('supabaseAnonKey');
 
