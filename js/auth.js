@@ -1,97 +1,171 @@
+/**
+ * Autenticación para Biblio
+ * 
+ * NOTA IMPORTANTE: Este sistema usa una SERVICE KEY de Supabase expuesta en el frontend.
+ * Esto NO es seguro para producción. Para producción, usa:
+ * 1. Un backend propio que maneje la autenticación
+ * 2. O el sistema de autenticación nativo de Supabase (supabase.auth)
+ * 
+ * La SERVICE KEY tiene permisos completos y puede acceder a todas las tablas,
+ * incluso con RLS habilitado. NO la expongas en producción.
+ */
+
 let supabaseClient = null;
-let currentSession = null;
 
 const auth = {
-    // Inicializa el cliente Supabase y maneja la sesión
+    // Datos del usuario actualmente logueado
+    currentSession: null,
+    
+    /**
+     * Inicializa el cliente Supabase
+     * Usa la anon key para conexión normal, pero la service key para acceder a users
+     */
     async initSupabase() {
         const supabaseUrl = localStorage.getItem('supabaseUrl');
         const supabaseAnonKey = localStorage.getItem('supabaseAnonKey');
+        const supabaseServiceKey = localStorage.getItem('supabaseServiceKey');
 
-        if (supabaseUrl && supabaseAnonKey) {
-            try {
-                supabaseClient = window.Supabase.createClient(supabaseUrl, supabaseAnonKey);
-                console.log('Supabase client inicializado.');
-
-                // Escuchar cambios de autenticación
-                supabaseClient.auth.onAuthStateChange((event, session) => {
-                    console.log('Auth state changed:', event, session);
-                    currentSession = session;
-                    app.handleAuthChange(session?.user);
-                });
-
-                // Comprobar la sesión actual al inicio
-                const { data, error } = await supabaseClient.auth.getSession();
-                if (error) throw error;
-                currentSession = data.session;
-                app.handleAuthChange(data.session?.user);
-
-            } catch (error) {
-                console.error('Error al inicializar Supabase:', error.message);
-                alert('Error al conectar con Supabase. Por favor, revisa tus claves en la configuración.');
-                app.showSupabaseConfigModal();
-            }
-        } else {
+        if (!supabaseUrl) {
             console.log('Supabase no configurado. Mostrando modal de configuración.');
             app.showSupabaseConfigModal();
+            document.dispatchEvent(new Event('supabaseReady'));
+            return;
         }
-        // Siempre anunciar que Supabase está listo (incluso si no está configurado,
-        // para que la app pueda mostrar el modal de configuración)
-        document.dispatchEvent(new Event('supabaseReady'));
-    },
 
-    // Iniciar sesión con email y contraseña
+        try {
+            // Usar service key si está disponible (para acceder a la tabla users)
+            // de lo contrario, usar anon key (pero esto puede fallar con RLS)
+            const keyToUse = supabaseServiceKey || supabaseAnonKey;
+            
+            if (!keyToUse) {
+                console.log('No hay clave configurada. Mostrando modal de configuración.');
+                app.showSupabaseConfigModal();
+                document.dispatchEvent(new Event('supabaseReady'));
+                return;
+            }
+            
+            supabaseClient = window.Supabase.createClient(supabaseUrl, keyToUse);
+            console.log('Supabase client inicializado con', supabaseServiceKey ? 'SERVICE KEY' : 'ANON KEY');
+            
+            // Inicializar el módulo de usuarios con el cliente Supabase
+            users.init(supabaseClient);
+            
+            // Verificar si hay una sesión guardada en localStorage
+            const savedUser = localStorage.getItem('biblio_user');
+            if (savedUser) {
+                try {
+                    this.currentSession = JSON.parse(savedUser);
+                    users.currentUser = this.currentSession;
+                    console.log('Sesión recuperada:', this.currentSession);
+                    app.handleAuthChange(this.currentSession);
+                } catch (e) {
+                    console.error('Error al recuperar sesión:', e);
+                    localStorage.removeItem('biblio_user');
+                }
+            } else {
+                // No hay sesión, mostrar modal de autenticación
+                app.handleAuthChange(null);
+            }
+            
+            document.dispatchEvent(new Event('supabaseReady'));
+            
+        } catch (error) {
+            console.error('Error al inicializar Supabase:', error.message);
+            alert('Error al conectar con Supabase. Por favor, revisa tus claves en la configuración.');
+            app.showSupabaseConfigModal();
+            document.dispatchEvent(new Event('supabaseReady'));
+        }
+    },
+    
+    // Iniciar sesión con email y contraseña (usando nuestro sistema)
     async signIn(email, password) {
         if (!supabaseClient) throw new Error('Supabase no inicializado.');
-        const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        console.log('Sesión iniciada con éxito.');
+        
+        const result = await users.login(email, password);
+        
+        if (!result.success) {
+            throw new Error(result.error || 'Error al iniciar sesión');
+        }
+        
+        // Guardar sesión
+        this.currentSession = result.user;
+        users.currentUser = result.user;
+        localStorage.setItem('biblio_user', JSON.stringify(result.user));
+        
+        console.log('Sesión iniciada con éxito:', result.user);
+        return result.user;
     },
-
-    // Registrar nuevo usuario con email y contraseña
+    
+    // Registrar nuevo usuario (usando nuestro sistema)
     async signUp(email, password) {
         if (!supabaseClient) throw new Error('Supabase no inicializado.');
-        const { error } = await supabaseClient.auth.signUp({ email, password });
-        if (error) throw error;
-        alert('¡Registro exitoso! Por favor, verifica tu email para activar tu cuenta.');
+        
+        const result = await users.register(email, password);
+        
+        if (!result.success) {
+            throw new Error(result.error || 'Error en el registro');
+        }
+        
+        // Guardar sesión automáticamente después del registro
+        this.currentSession = result.user;
+        users.currentUser = result.user;
+        localStorage.setItem('biblio_user', JSON.stringify(result.user));
+        
+        console.log('Registro exitoso:', result.user);
+        return result.user;
     },
-
-    // Iniciar sesión con Google
-    async signInWithGoogle() {
-        if (!supabaseClient) throw new Error('Supabase no inicializado.');
-        const { error } = await supabaseClient.auth.signInWithOAuth({
-            provider: 'google',
-            options: { redirectTo: window.location.origin } // Redirigir a la URL actual después del login
-        });
-        if (error) throw error;
-    },
-
+    
     // Cerrar sesión
     async signOut() {
-        if (!supabaseClient) throw new Error('Supabase no inicializado.');
-        const { error } = await supabaseClient.auth.signOut();
-        if (error) throw error;
+        users.logout();
+        this.currentSession = null;
+        localStorage.removeItem('biblio_user');
         console.log('Sesión cerrada.');
     },
-
+    
     // Obtener la sesión actual
     getSession() {
-        return currentSession;
+        return this.currentSession;
     },
-
+    
     // Obtener el usuario actual
     getUser() {
-        return currentSession?.user || null;
+        return users.getCurrentUser();
     },
-
+    
+    // Verificar si el usuario es admin
+    isAdmin() {
+        return users.isAdmin();
+    },
+    
+    // Obtener el ID del usuario actual
+    getUserId() {
+        return users.getCurrentUserId();
+    },
+    
     // Función para realizar consultas a la base de datos de Supabase
     async from(tableName) {
         if (!supabaseClient) throw new Error('Supabase no inicializado o no configurado.');
-        if (!currentSession?.user) throw new Error('Usuario no autenticado.');
+        if (!this.getUser()) throw new Error('Usuario no autenticado.');
         return supabaseClient.from(tableName);
     },
-
-    // Exponer supabaseClient para que storage.js pueda usarlo
+    
+    // Obtener el cliente Supabase (para usar en storage.js)
     getClient() {
         return supabaseClient;
+    },
+    
+    // --- Funciones para gestión de usuarios (delegadas a users.js) ---
+    
+    async getAllUsers() {
+        return users.getAllUsers();
+    },
+    
+    async updateUserRole(userId, newRole) {
+        return users.updateUserRole(userId, newRole);
+    },
+    
+    async deleteUser(userId) {
+        return users.deleteUser(userId);
     }
 };

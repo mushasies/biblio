@@ -55,7 +55,17 @@ const storage = {
         const client = auth.getClient();
         if (!client) throw new Error('Cliente Supabase no disponible');
         
-        const { data, error } = await client.from(this.storeName).select('*').order('fechaRegistro', { ascending: false });
+        const userId = auth.getUserId();
+        
+        // Obtener solo los libros del usuario actual (o todos si es admin)
+        let query = client.from(this.storeName).select('*').order('fechaRegistro', { ascending: false });
+        
+        if (!auth.isAdmin()) {
+          // Si no es admin, filtrar por user_id
+          query = query.eq('user_id', userId);
+        }
+        
+        const { data, error } = await query;
         if (error) throw error;
         
         // Actualizar IndexedDB con los datos de Supabase para caché offline
@@ -91,8 +101,21 @@ const storage = {
         const client = auth.getClient();
         if (!client) throw new Error('Cliente Supabase no disponible');
         
-        const { data, error } = await client.from(this.storeName).select('*').eq('id', id).single();
+        const userId = auth.getUserId();
+        
+        // Obtener el libro, verificando que pertenece al usuario (o es admin)
+        let query = client.from(this.storeName).select('*').eq('id', id);
+        
+        if (!auth.isAdmin()) {
+          query = query.eq('user_id', userId);
+        }
+        
+        const { data, error } = await query.single();
         if (error) throw error;
+        
+        if (!data) {
+          throw new Error('Libro no encontrado o no tienes permisos para acceder a él');
+        }
         
         return this.supabaseToLocalBook(data);
       } catch (error) {
@@ -186,7 +209,16 @@ const storage = {
         const client = auth.getClient();
         if (!client) throw new Error('Cliente Supabase no disponible');
         
-        const { error } = await client.from(this.storeName).delete().eq('id', id);
+        const userId = auth.getUserId();
+        
+        // Eliminar el libro, verificando que pertenece al usuario (o es admin)
+        let query = client.from(this.storeName).delete().eq('id', id);
+        
+        if (!auth.isAdmin()) {
+          query = query.eq('user_id', userId);
+        }
+        
+        const { error } = await query;
         if (error) throw error;
         
         // También eliminar de IndexedDB
@@ -247,7 +279,7 @@ const storage = {
       fechaCompra: supabaseBook.fecha_compra,
       realPhotos: supabaseBook.real_photos || [],
       fechaRegistro: supabaseBook.fecha_registro || new Date().toISOString(),
-      // No incluimos user_id en el objeto local directamente para abstraer la capa de autenticación
+      user_id: supabaseBook.user_id  // Incluir user_id para sincronización
     };
   },
 

@@ -49,14 +49,14 @@ const app = {
     }
   },
 
-  // Manejar cambios en el estado de autenticación de Supabase
+  // Manejar cambios en el estado de autenticación (ahora usa nuestro sistema)
   async handleAuthChange(user) {
     this.user = user;
     this.isAuthenticated = !!user;
     // Habilitar Supabase en storage si hay usuario Y está configurado
-    const hasSupabaseConfig = localStorage.getItem('supabaseUrl') && localStorage.getItem('supabaseAnonKey');
+    const hasSupabaseConfig = localStorage.getItem('supabaseUrl') && (localStorage.getItem('supabaseAnonKey') || localStorage.getItem('supabaseServiceKey'));
     storage.isSupabaseEnabled = !!user && hasSupabaseConfig;
-
+    
     const appContent = document.getElementById("app-content");
     const authModal = document.getElementById("auth-modal");
     const supabaseConfigModal = document.getElementById("supabase-config-modal");
@@ -75,7 +75,7 @@ const app = {
       if (appContent) appContent.classList.add("hidden");
       
       const hasUrl = localStorage.getItem("supabaseUrl");
-      const hasKey = localStorage.getItem("supabaseAnonKey");
+      const hasKey = localStorage.getItem("supabaseAnonKey") || localStorage.getItem("supabaseServiceKey");
 
       if (hasUrl && hasKey) {
         if (authModal) this.showAuthModal("login");
@@ -251,15 +251,19 @@ const app = {
   handleSupabaseConfig(event) {
     event.preventDefault();
     const url = document.getElementById("supabase-url-input").value.trim();
-    const key = document.getElementById("supabase-anon-key-input").value.trim();
+    const anonKey = document.getElementById("supabase-anon-key-input").value.trim();
+    const serviceKey = document.getElementById("supabase-service-key-input").value.trim();
     
-    if (url && key) {
+    if (url && anonKey) {
       localStorage.setItem("supabaseUrl", url);
-      localStorage.setItem("supabaseAnonKey", key);
+      localStorage.setItem("supabaseAnonKey", anonKey);
+      if (serviceKey) {
+        localStorage.setItem("supabaseServiceKey", serviceKey);
+      }
       this.closeSupabaseConfigModal();
       auth.initSupabase(); // Re-inicializar Supabase con las nuevas claves
     } else {
-      alert("Por favor, introduce tanto la URL como la Clave Anon de Supabase.");
+      alert("Por favor, introduce al menos la URL y la Clave Anon de Supabase.");
     }
   },
 
@@ -310,6 +314,8 @@ const app = {
     const password = document.getElementById("login-password").value;
     try {
       await auth.signIn(email, password);
+      this.closeAuthModal();
+      this.handleAuthChange(auth.getUser());
     } catch (error) {
       alert("Error al iniciar sesión: " + error.message);
       console.error("Error login:", error);
@@ -323,27 +329,23 @@ const app = {
     const password = document.getElementById("signup-password").value;
     try {
       await auth.signUp(email, password);
+      alert('¡Registro exitoso! Ya puedes iniciar sesión.');
+      this.closeAuthModal();
+      this.showAuthModal('login');
     } catch (error) {
       alert("Error en el registro: " + error.message);
       console.error("Error signup:", error);
     }
   },
 
-  // Iniciar sesión con Google
-  async signInWithGoogle() {
-    try {
-      await auth.signInWithGoogle();
-    } catch (error) {
-      alert("Error al conectar con Google: " + error.message);
-      console.error("Error Google login:", error);
-    }
-  },
+
 
   // Cerrar sesión
   async handleLogout() {
     if (confirm("¿Estás seguro de que quieres cerrar sesión?")) {
       try {
         await auth.signOut();
+        this.handleAuthChange(null);
       } catch (error) {
         alert("Error al cerrar sesión: " + error.message);
         console.error("Error logout:", error);

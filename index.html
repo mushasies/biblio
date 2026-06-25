@@ -34,6 +34,9 @@ primary: {
 <!-- Supabase - DEBE CARGARSE ANTES DE CUALQUIER SCRIPT QUE LO USE -->
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
+<!-- Bcrypt.js para hasheo de contraseñas -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bcrypt.js/2.4.0/bcrypt.min.js"></script>
+
 <!-- Manifest & Theme Color para PWA -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0284c7">
@@ -491,6 +494,12 @@ class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline
 <input type="password" id="supabase-anon-key-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." 
 class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
 </div>
+<div>
+<label class="block text-xs font-bold text-slate-500 mb-1">Clave de Servicio (service key) <span class="text-slate-400">(opcional, para acceso completo)</span></label>
+<input type="password" id="supabase-service-key-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." 
+class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+<p class="text-[10px] text-slate-400 mt-1">⚠️ Solo para desarrollo. NO uses esto en producción.</p>
+</div>
 <div class="flex gap-3 pt-2">
 <button type="button" onclick="app.closeSupabaseConfigModal()" 
 class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-sm transition">
@@ -541,12 +550,6 @@ class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline
 class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
 </div>
 <div class="flex gap-3 pt-2">
-<button type="button" onclick="app.signInWithGoogle()" 
-class="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg text-sm flex items-center justify-center gap-2 shadow transition active:scale-95">
-<i data-lucide="loader-2" class="w-4 h-4 hidden"></i>
-<img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="Google" class="w-4 h-4">
-<span>Continuar con Google</span>
-</button>
 <button type="submit" 
 class="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg text-sm shadow transition active:scale-95">
 Iniciar Sesión
@@ -583,6 +586,7 @@ Registrarse
 </div>
 
 <!-- Carga de scripts de la app de forma ordenada -->
+<script src="js/users.js"></script>
 <script src="js/storage.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/api.js"></script>
