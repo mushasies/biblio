@@ -51,15 +51,21 @@ const storage = {
   async getAllBooks() {
     if (this.isSupabaseEnabled && auth.getUser()) {
       // Si Supabase está habilitado y el usuario logueado, usar Supabase
-      const { data, error } = await auth.from(this.storeName).select('*').order('fechaRegistro', { ascending: false });
-      if (error) {
+      try {
+        const client = auth.getClient();
+        if (!client) throw new Error('Cliente Supabase no disponible');
+        
+        const { data, error } = await client.from(this.storeName).select('*').order('fechaRegistro', { ascending: false });
+        if (error) throw error;
+        
+        // Actualizar IndexedDB con los datos de Supabase para caché offline
+        await this.syncToIndexedDB(data);
+        return data.map(this.supabaseToLocalBook); // Adaptar formato si es necesario
+      } catch (error) {
         console.error("Error al obtener libros de Supabase:", error.message);
         // En caso de error, intentar con IndexedDB como fallback
         return this.getAllBooksIndexedDB();
       }
-      // Actualizar IndexedDB con los datos de Supabase para caché offline
-      await this.syncToIndexedDB(data);
-      return data.map(this.supabaseToLocalBook); // Adaptar formato si es necesario
     } else {
       // Si no hay Supabase o no está logueado, usar IndexedDB
       return this.getAllBooksIndexedDB();
@@ -81,12 +87,18 @@ const storage = {
   // Obtener un libro específico por su ID
   async getBook(id) {
     if (this.isSupabaseEnabled && auth.getUser()) {
-      const { data, error } = await auth.from(this.storeName).select('*').eq('id', id).single();
-      if (error) {
+      try {
+        const client = auth.getClient();
+        if (!client) throw new Error('Cliente Supabase no disponible');
+        
+        const { data, error } = await client.from(this.storeName).select('*').eq('id', id).single();
+        if (error) throw error;
+        
+        return this.supabaseToLocalBook(data);
+      } catch (error) {
         console.error("Error al obtener libro de Supabase:", error.message);
         return this.getBookIndexedDB(id);
       }
-      return this.supabaseToLocalBook(data);
     } else {
       return this.getBookIndexedDB(id);
     }
@@ -116,24 +128,33 @@ const storage = {
 
     if (this.isSupabaseEnabled && auth.getUser()) {
       // Si Supabase está activo, guardar en la nube
-      const supabaseBook = this.localToSupabaseBook(book, auth.getUser().id);
-      
-      let result;
-      if (book.id) {
-        // Actualizar en Supabase
-        const { data, error } = await auth.from(this.storeName).update(supabaseBook).eq('id', book.id).select();
-        if (error) throw error;
-        result = this.supabaseToLocalBook(data[0]);
-      } else {
-        // Insertar en Supabase
-        const { data, error } = await auth.from(this.storeName).insert(supabaseBook).select();
-        if (error) throw error;
-        result = this.supabaseToLocalBook(data[0]);
-      }
+      try {
+        const client = auth.getClient();
+        if (!client) throw new Error('Cliente Supabase no disponible');
+        
+        const supabaseBook = this.localToSupabaseBook(book, auth.getUser().id);
+        
+        let result;
+        if (book.id) {
+          // Actualizar en Supabase
+          const { data, error } = await client.from(this.storeName).update(supabaseBook).eq('id', book.id).select();
+          if (error) throw error;
+          result = this.supabaseToLocalBook(data[0]);
+        } else {
+          // Insertar en Supabase
+          const { data, error } = await client.from(this.storeName).insert(supabaseBook).select();
+          if (error) throw error;
+          result = this.supabaseToLocalBook(data[0]);
+        }
 
-      // También guardar en IndexedDB para mantener caché offline
-      await this.saveBookIndexedDB(result);
-      return result;
+        // También guardar en IndexedDB para mantener caché offline
+        await this.saveBookIndexedDB(result);
+        return result;
+      } catch (error) {
+        console.error("Error al guardar en Supabase:", error.message);
+        // Fallback a IndexedDB
+        return this.saveBookIndexedDB(book);
+      }
 
     } else {
       // Si no hay Supabase o no está logueado, solo guardar en IndexedDB
@@ -161,11 +182,21 @@ const storage = {
   async deleteBook(id) {
     if (this.isSupabaseEnabled && auth.getUser()) {
       // Eliminar de Supabase
-      const { error } = await auth.from(this.storeName).delete().eq('id', id);
-      if (error) throw error;
-      // También eliminar de IndexedDB
-      await this.deleteBookIndexedDB(id);
-      return true;
+      try {
+        const client = auth.getClient();
+        if (!client) throw new Error('Cliente Supabase no disponible');
+        
+        const { error } = await client.from(this.storeName).delete().eq('id', id);
+        if (error) throw error;
+        
+        // También eliminar de IndexedDB
+        await this.deleteBookIndexedDB(id);
+        return true;
+      } catch (error) {
+        console.error("Error al eliminar de Supabase:", error.message);
+        // Fallback a IndexedDB
+        return this.deleteBookIndexedDB(id);
+      }
     } else {
       // Eliminar solo de IndexedDB
       return this.deleteBookIndexedDB(id);

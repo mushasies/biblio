@@ -31,6 +31,9 @@ primary: {
 <!-- Html5-Qrcode (Lector de códigos de barras) -->
 <script src="https://unpkg.com/html5-qrcode"></script>
 
+<!-- Supabase - DEBE CARGARSE ANTES DE CUALQUIER SCRIPT QUE LO USE -->
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
 <!-- Manifest & Theme Color para PWA -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0284c7">
@@ -580,7 +583,6 @@ Registrarse
 </div>
 
 <!-- Carga de scripts de la app de forma ordenada -->
-<script src="https://unpkg.com/@supabase/supabase-js@1/dist/umd/supabase.js"></script>
 <script src="js/storage.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/api.js"></script>

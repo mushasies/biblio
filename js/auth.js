@@ -4,31 +4,12 @@ let currentSession = null;
 const auth = {
     // Inicializa el cliente Supabase y maneja la sesión
     async initSupabase() {
-        // Verificar si Supabase está definido, si no, cargarlo dinámicamente
-        if (typeof Supabase === 'undefined') {
-            console.log('Supabase no está definido. Cargando dinámicamente...');
-            await new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = 'https://unpkg.com/@supabase/supabase-js@1/dist/umd/supabase.js';
-                script.onload = () => {
-                    if (typeof Supabase !== 'undefined') {
-                        console.log('Supabase cargado correctamente');
-                        resolve();
-                    } else {
-                        reject(new Error('Supabase no se definió después de cargar el script'));
-                    }
-                };
-                script.onerror = () => reject(new Error('Error al cargar Supabase'));
-                document.head.appendChild(script);
-            });
-        }
-
         const supabaseUrl = localStorage.getItem('supabaseUrl');
         const supabaseAnonKey = localStorage.getItem('supabaseAnonKey');
 
         if (supabaseUrl && supabaseAnonKey) {
             try {
-                supabaseClient = Supabase.createClient(supabaseUrl, supabaseAnonKey);
+                supabaseClient = window.Supabase.createClient(supabaseUrl, supabaseAnonKey);
                 console.log('Supabase client inicializado.');
 
                 // Escuchar cambios de autenticación
@@ -43,8 +24,6 @@ const auth = {
                 if (error) throw error;
                 currentSession = data.session;
                 app.handleAuthChange(data.session?.user);
-
-                document.dispatchEvent(new Event('supabaseReady'));
 
             } catch (error) {
                 console.error('Error al inicializar Supabase:', error.message);
@@ -109,5 +88,10 @@ const auth = {
         if (!supabaseClient) throw new Error('Supabase no inicializado o no configurado.');
         if (!currentSession?.user) throw new Error('Usuario no autenticado.');
         return supabaseClient.from(tableName);
+    },
+
+    // Exponer supabaseClient para que storage.js pueda usarlo
+    getClient() {
+        return supabaseClient;
     }
 };

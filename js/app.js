@@ -53,7 +53,9 @@ const app = {
   async handleAuthChange(user) {
     this.user = user;
     this.isAuthenticated = !!user;
-    storage.isSupabaseEnabled = !!user; // Habilitar Supabase en storage si hay usuario
+    // Habilitar Supabase en storage si hay usuario Y está configurado
+    const hasSupabaseConfig = localStorage.getItem('supabaseUrl') && localStorage.getItem('supabaseAnonKey');
+    storage.isSupabaseEnabled = !!user && hasSupabaseConfig;
 
     const appContent = document.getElementById("app-content");
     const authModal = document.getElementById("auth-modal");
