@@ -36,6 +36,12 @@ const auth = {
             // Usar service key si está disponible (para acceder a la tabla users)
             // de lo contrario, usar anon key (pero esto puede fallar con RLS)
             const keyToUse = supabaseServiceKey || supabaseAnonKey;
+            console.log('Usando clave:', supabaseServiceKey ? 'SERVICE KEY' : 'ANON KEY');
+            
+            // Advertir si solo se usa anon key (puede fallar con RLS)
+            if (!supabaseServiceKey && supabaseAnonKey) {
+              console.warn('ADVERTENCIA: Usando ANON KEY. Para registrar usuarios, necesitas la SERVICE KEY o desactivar RLS en la tabla users.');
+            }
             
             if (!keyToUse) {
                 console.log('No hay clave configurada. Mostrando modal de configuración.');
@@ -140,10 +146,23 @@ const auth = {
     async signUp(email, password) {
         if (!supabaseClient) throw new Error('Supabase no inicializado.');
         
+        // Verificar si estamos usando ANON KEY sin SERVICE KEY
+        const supabaseServiceKey = localStorage.getItem('supabaseServiceKey');
+        const supabaseAnonKey = localStorage.getItem('supabaseAnonKey');
+        if (supabaseAnonKey && !supabaseServiceKey) {
+          console.warn('ADVERTENCIA: Intentando registrar con ANON KEY. Esto fallará si RLS está activado en la tabla users.');
+        }
+        
         const result = await users.register(email, password);
         
         if (!result.success) {
-            throw new Error(result.error || 'Error en el registro');
+            // Mejorar el mensaje de error para el usuario
+            let errorMsg = result.error || 'Error en el registro';
+            // Si el error sugiere problemas de permisos, mostrar guía clara
+            if (errorMsg.includes('permisos') || errorMsg.includes('permission') || errorMsg.includes('RLS') || errorMsg.includes('denied')) {
+              errorMsg = 'No se puede registrar el usuario. Necesitas configurar la SERVICE KEY de Supabase en la configuración. La anon key no tiene permisos para insertar usuarios.';
+            }
+            throw new Error(errorMsg);
         }
         
         // Guardar sesión automáticamente después del registro

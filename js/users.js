@@ -20,7 +20,6 @@ const users = {
   init(supabaseClient) {
     this.supabaseClient = supabaseClient;
     console.log('Users module initialized');
-    console.log('NOTA: Asegúrate de que la tabla "users" en Supabase tenga los campos: id, email, password_hash, role');
   },
   
   /**
@@ -44,32 +43,13 @@ const users = {
       // Hashear la contraseña
       const passwordHash = await this.hashPassword(password);
       
-      // Verificar si es el primer usuario (para asignar rol admin)
-      let isFirstUser = false;
-      try {
-        const { data: existingUsers, error: countError } = await this.supabaseClient
-          .from('users')
-          .select('id')
-          .limit(1);
-        
-        if (!countError) {
-          isFirstUser = !existingUsers || existingUsers.length === 0;
-        }
-      } catch (err) {
-        console.warn('No se pudo verificar si hay usuarios existentes, asumiendo que no es el primero:', err);
-        // Si hay error al contar, asumimos que no es el primero por seguridad
-        isFirstUser = false;
-      }
-      
-      // Insertar usuario en Supabase con el rol adecuado
+      // Insertar usuario en Supabase
+      // NOTE: El trigger 'trg_first_user' en la BD asignará role='admin' al primer usuario
+      console.log('Intentando registrar usuario con email:', email);
       const { data, error } = await this.supabaseClient
         .from('users')
         .insert([
-          { 
-            email, 
-            password_hash: passwordHash,
-            role: isFirstUser ? 'admin' : 'user'
-          }
+          { email, password_hash: passwordHash }
         ])
         .select();
       
@@ -78,7 +58,16 @@ const users = {
         if (error.code === '23505') {
           return { success: false, error: 'Este email ya está registrado' };
         }
-        return { success: false, error: error.message || 'Error al registrar usuario' };
+        // Mostrar más detalles del error
+        const errorMsg = error.message || error.details || JSON.stringify(error) || 'Error al registrar usuario';
+        console.error('Detalles del error:', error);
+        
+        // Mensaje de ayuda para errores comunes
+        if (errorMsg.includes('RLS') || errorMsg.includes('permission') || errorMsg.includes('denied')) {
+          return { success: false, error: 'Error de permisos. Asegúrate de: 1) Usar la SERVICE KEY (no la anon key), 2) Desactivar RLS en la tabla users, o 3) Configurar políticas RLS para permitir INSERT.' };
+        }
+        
+        return { success: false, error: errorMsg };
       }
       
       if (!data || !data[0]) {
@@ -86,20 +75,32 @@ const users = {
       }
       
       const newUser = data[0];
-      console.log('Usuario registrado:', newUser, '(Rol:', isFirstUser ? 'ADMIN' : 'USER', ')');
+      console.log('Usuario registrado:', newUser, '(Rol:', newUser.role || 'user', ')');
       
       return { 
         success: true, 
         user: { 
           id: newUser.id, 
           email: newUser.email,
-          role: newUser.role || (isFirstUser ? 'admin' : 'user')
+          role: newUser.role || 'user'
         } 
       };
       
     } catch (err) {
       console.error('Register error:', err);
-      return { success: false, error: 'Error interno al registrar usuario' };
+      // Intentar extraer más información del error
+      let errorMsg = 'Error interno al registrar usuario';
+      if (err.message) {
+        errorMsg = err.message;
+      }
+      if (err.error) {
+        errorMsg = err.error.message || err.error.details || JSON.stringify(err.error);
+      }
+      // Añadir sugerencia para errores de permisos
+      if (errorMsg.includes('permission') || errorMsg.includes('denied') || errorMsg.includes('RLS')) {
+        errorMsg = 'Error de permisos en la base de datos. SOLUCIÓN: Usa la SERVICE KEY de Supabase (no la anon key) o desactiva RLS en la tabla users.';
+      }
+      return { success: false, error: errorMsg };
     }
   },
   

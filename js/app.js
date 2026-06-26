@@ -269,6 +269,13 @@ const app = {
       localStorage.setItem("supabaseAnonKey", anonKey);
       if (serviceKey) {
         localStorage.setItem("supabaseServiceKey", serviceKey);
+      } else {
+        // Advertir si no se proporcionó service key
+        if (confirm("ADVERTENCIA: Sin la SERVICE KEY, no podrás registrar usuarios. ¿Quieres continuar de todos modos? (Solo podrás usar la app con IndexedDB local o con usuarios ya existentes)")) {
+          // Continuar sin service key
+        } else {
+          return; // No guardar si el usuario cancela
+        }
       }
       this.closeSupabaseConfigModal();
       auth.initSupabase(); // Re-inicializar Supabase con las nuevas claves
