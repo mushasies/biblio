@@ -663,7 +663,7 @@ const app = {
         const fechaCompra = document.getElementById('form-fecha-compra').value;
 
         const bookToSave = {
-            id: bookId ? Number(bookId) : undefined,
+            id: bookId ? (typeof bookId === 'number' ? bookId : parseInt(bookId, 10)) : undefined,
             titulo: title,
             autor: autor,
             isbn: api.cleanISBN(isbn),
@@ -679,7 +679,8 @@ const app = {
         };
 
         if (bookId) {
-            const originalBook = this.books.find(b => b.id === Number(bookId) || b.id === bookId);
+            const numericBookId = typeof bookId === 'number' ? bookId : parseInt(bookId, 10);
+            const originalBook = this.books.find(b => b.id === numericBookId || b.id === bookId);
             if (originalBook) {
                 bookToSave.fechaRegistro = originalBook.fechaRegistro || originalBook.fecha_registro;
             }
@@ -820,7 +821,7 @@ const app = {
     editBook(book) {
         this.showAddBookModal('manual');
 
-        document.getElementById('form-book-id').value = book.id;
+        document.getElementById('form-book-id').value = book.id || '';
         document.getElementById('form-titulo').value = book.titulo || '';
         document.getElementById('form-autor').value = book.autor || '';
         document.getElementById('form-isbn').value = book.isbn || '';

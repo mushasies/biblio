@@ -291,46 +291,12 @@ const users = {
   },
   
   /**
-   * Hashear contraseña con bcrypt
-   * Usa la librería bcrypt.js cargada desde CDN
+   * Hashear contraseña con SHA-256
+   * Usa Web Crypto API (disponible en todos los navegadores modernos)
    * @param {string} password - Contraseña en texto plano
    * @returns {Promise<string>} - Hash de la contraseña
    */
   async hashPassword(password) {
-    // Esperar a que bcrypt esté disponible
-    const maxAttempts = 10;
-    const delay = 200;
-    
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if (typeof bcrypt !== 'undefined' && bcrypt.genSaltSync && bcrypt.hashSync) {
-        const salt = bcrypt.genSaltSync(10);
-        const hash = bcrypt.hashSync(password, salt);
-        return hash;
-      }
-      
-      // Si no está disponible, esperar
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-    
-    // Si después de varios intentos no está disponible, intentar cargarlo
-    await new Promise((resolve) => {
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js';
-      script.onload = resolve;
-      script.onerror = resolve;
-      document.head.appendChild(script);
-    });
-    
-    // Intentar de nuevo después de cargar
-    if (typeof bcrypt !== 'undefined' && bcrypt.genSaltSync && bcrypt.hashSync) {
-      const salt = bcrypt.genSaltSync(10);
-      const hash = bcrypt.hashSync(password, salt);
-      return hash;
-    }
-    
-    // Fallback: usar un hash simple (NO SEGURO, solo para desarrollo)
-    console.warn('ADVERTENCIA: bcrypt no está disponible. Usando hash simple (NO SEGURO para producción).');
-    // Simple SHA-256 (no seguro, pero funcional)
     const encoder = new TextEncoder();
     const data = encoder.encode(password);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -345,35 +311,6 @@ const users = {
    * @returns {Promise<boolean>}
    */
   async verifyPassword(password, hash) {
-    // Esperar a que bcrypt esté disponible
-    const maxAttempts = 10;
-    const delay = 200;
-    
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if (typeof bcrypt !== 'undefined' && bcrypt.compareSync) {
-        return bcrypt.compareSync(password, hash);
-      }
-      
-      // Si no está disponible, esperar
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-    
-    // Si después de varios intentos no está disponible, intentar cargarlo
-    await new Promise((resolve) => {
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js';
-      script.onload = resolve;
-      script.onerror = resolve;
-      document.head.appendChild(script);
-    });
-    
-    // Intentar de nuevo después de cargar
-    if (typeof bcrypt !== 'undefined' && bcrypt.compareSync) {
-      return bcrypt.compareSync(password, hash);
-    }
-    
-    // Fallback: comparar hashes SHA-256 directamente
-    console.warn('ADVERTENCIA: bcrypt no está disponible. Usando comparación simple (NO SEGURO para producción).');
     const encoder = new TextEncoder();
     const data = encoder.encode(password);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -383,9 +320,5 @@ const users = {
   }
 };
 
-// Inicializar bcrypt si ya está cargado
-if (typeof bcrypt === 'undefined') {
-  const bcryptScript = document.createElement('script');
-  bcryptScript.src = 'https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js';  
-  document.head.appendChild(bcryptScript);
-}
+// SHA-256 está disponible nativamente en todos los navegadores modernos
+// No se necesita bcrypt.js

@@ -1,7 +1,7 @@
 const storage = {
   dbName: 'BiblioDB',
   dbVersion: 2,
-  storeName: 'books',
+  storeName: 'libros',
   libraryStoreName: 'libraries',
   db: null,
   isSupabaseEnabled: false,
@@ -165,7 +165,12 @@ const storage = {
     return new Promise((resolve, reject) => {
       const transaction = this.db.transaction([this.libraryStoreName], 'readonly');
       const store = transaction.objectStore(this.libraryStoreName);
-      const request = store.get(Number(libraryId));
+      const numericId = typeof libraryId === 'number' ? libraryId : (libraryId ? parseInt(libraryId, 10) : NaN);
+      if (isNaN(numericId)) {
+        reject(new Error('ID de biblioteca inválido'));
+        return;
+      }
+      const request = store.get(numericId);
       request.onsuccess = () => resolve(request.result);
       request.onerror = (e) => reject(e.target.error);
     });
@@ -335,7 +340,12 @@ const storage = {
     return new Promise((resolve, reject) => {
       const transaction = this.db.transaction([this.storeName], 'readonly');
       const store = transaction.objectStore(this.storeName);
-      const request = store.get(Number(id));
+      const numericId = typeof id === 'number' ? id : (id ? parseInt(id, 10) : NaN);
+      if (isNaN(numericId)) {
+        reject(new Error('ID inválido'));
+        return;
+      }
+      const request = store.get(numericId);
       request.onsuccess = () => resolve(request.result);
       request.onerror = (e) => reject(e.target.error);
     });
@@ -356,7 +366,7 @@ const storage = {
         if (!client) throw new Error('Cliente no disponible');
         const supabaseBook = this.localToSupabaseBook(book);
         let result;
-        if (book.id) {
+        if (book.id !== undefined && book.id !== null && !isNaN(book.id)) {
           const { data, error } = await client.from(this.storeName).update(supabaseBook).eq('id', book.id).select();
           if (error) throw error;
           result = this.supabaseToLocalBook(data[0]);
@@ -380,6 +390,14 @@ const storage = {
     return new Promise((resolve, reject) => {
       const transaction = this.db.transaction([this.storeName], 'readwrite');
       const store = transaction.objectStore(this.storeName);
+      
+      // Asegurar que el id es un número válido para IndexedDB
+      // Si el libro tiene id pero no es un número, eliminarlo para que autoIncrement lo genere
+      if (book.id !== undefined && book.id !== null && typeof book.id !== 'number') {
+        console.warn('ID inválido para IndexedDB, se generará uno nuevo:', book.id);
+        delete book.id;
+      }
+      
       const request = store.put(book);
       request.onsuccess = (e) => {
         book.id = e.target.result;
@@ -414,7 +432,12 @@ const storage = {
     return new Promise((resolve, reject) => {
       const transaction = this.db.transaction([this.storeName], 'readwrite');
       const store = transaction.objectStore(this.storeName);
-      const request = store.delete(Number(id));
+      const numericId = typeof id === 'number' ? id : (id ? parseInt(id, 10) : NaN);
+      if (isNaN(numericId)) {
+        reject(new Error('ID inválido para eliminar'));
+        return;
+      }
+      const request = store.delete(numericId);
       request.onsuccess = () => resolve(true);
       request.onerror = (e) => reject(e.target.error);
     });
@@ -432,8 +455,11 @@ const storage = {
   },
 
   supabaseToLocalBook(sBook) {
+    // Asegurar que el id es un número (BIGINT de Supabase llega como número en JavaScript)
+    const bookId = typeof sBook.id === 'string' ? parseInt(sBook.id, 10) : (sBook.id || undefined);
+    
     return {
-      id: sBook.id,
+      id: bookId,
       titulo: sBook.titulo,
       autor: sBook.autor,
       isbn: sBook.isbn,
@@ -452,8 +478,8 @@ const storage = {
   },
 
   localToSupabaseBook(localBook) {
-    return {
-      id: localBook.id || undefined,
+    // No enviar id para INSERT, solo para UPDATE
+    const supabaseBook = {
       user_id: localBook.user_id,
       library_id: localBook.library_id || this.currentLibraryId,
       titulo: localBook.titulo,
@@ -469,5 +495,12 @@ const storage = {
       real_photos: localBook.realPhotos,
       fecha_registro: localBook.fechaRegistro || new Date().toISOString()
     };
+    
+    // Solo incluir id si existe y es un número válido (para UPDATE)
+    if (localBook.id !== undefined && localBook.id !== null && typeof localBook.id === 'number') {
+      supabaseBook.id = localBook.id;
+    }
+    
+    return supabaseBook;
   }
 };
