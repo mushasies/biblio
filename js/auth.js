@@ -103,14 +103,15 @@ const auth = {
                     this.currentSession = JSON.parse(savedUser);
                     users.currentUser = this.currentSession;
                     console.log('Sesión recuperada:', this.currentSession);
-                    app.handleAuthChange(this.currentSession);
+                    app.handleAuthChange(this.currentSession, this.currentSession);
                 } catch (e) {
                     console.error('Error al recuperar sesión:', e);
                     localStorage.removeItem('biblio_user');
+                    app.handleAuthChange(null, null);
                 }
             } else {
                 // No hay sesión, mostrar modal de autenticación
-                app.handleAuthChange(null);
+                app.handleAuthChange(null, null);
             }
             
             document.dispatchEvent(new Event('supabaseReady'));

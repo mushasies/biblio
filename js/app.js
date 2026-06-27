@@ -62,8 +62,10 @@ const app = {
         const authModal = document.getElementById("auth-modal");
         const supabaseConfigModal = document.getElementById("supabase-config-modal");
 
+        console.log("handleAuthChange llamado - user:", user, "profile:", profile);
+
         if (user && profile) {
-            console.log("Usuario autenticado:", user.email, "Rol:", profile.rol);
+            console.log("Usuario autenticado:", user.email, "Rol:", profile.role || profile.rol);
 
             // Ocultar modals
             if (authModal) authModal.classList.add("hidden");
@@ -88,13 +90,14 @@ const app = {
             if (hasUrl && hasKey) {
                 if (authModal) this.showAuthModal("login");
                 if (appContent) appContent.classList.add("hidden");
+                if (supabaseConfigModal) supabaseConfigModal.classList.add("hidden");
             } else {
                 // Mostrar modal de configuracion de Supabase
                 if (supabaseConfigModal) supabaseConfigModal.classList.remove("hidden");
                 if (appContent) appContent.classList.remove("hidden");
+                if (authModal) authModal.classList.add("hidden");
             }
             
-            if (authModal) authModal.classList.add("hidden");
             this.books = [];
             this.filterAndRenderBooks();
         }
