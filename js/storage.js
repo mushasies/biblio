@@ -1,6 +1,6 @@
 const storage = {
   dbName: 'BiblioDB',
-  dbVersion: 2,
+  dbVersion: 3,
   storeName: 'libros',
   libraryStoreName: 'libraries',
   db: null,
@@ -10,6 +10,19 @@ const storage = {
   currentLibraryId: null,
 
   async init(supabaseClient = null) {
+    // Forzar eliminación de la base de datos antigua si existe para evitar conflictos
+    // Esto es necesario porque cambiamos el nombre del object store de 'books' a 'libros'
+    const deleteRequest = indexedDB.deleteDatabase(this.dbName);
+    deleteRequest.onsuccess = () => {
+      console.log('Base de datos antigua eliminada para forzar recreación.');
+    };
+    deleteRequest.onerror = (e) => {
+      console.warn('No se pudo eliminar la base de datos antigua:', e);
+    };
+    
+    // Esperar un momento para que la eliminación se complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     await new Promise((resolve, reject) => {
       const request = indexedDB.open(this.dbName, this.dbVersion);
 
@@ -27,8 +40,37 @@ const storage = {
 
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
+        const oldVersion = event.oldVersion;
+        const newVersion = event.newVersion;
         
-        if (!db.objectStoreNames.contains(this.storeName)) {
+        console.log(`Actualizando IndexedDB de v${oldVersion} a v${newVersion}`);
+        
+        // Migrar de 'books' a 'libros' si es necesario
+        if (db.objectStoreNames.contains('books') && !db.objectStoreNames.contains(this.storeName)) {
+          console.log('Migrando object store de "books" a "libros"...');
+          const oldStore = event.transaction.objectStore('books');
+          const newStore = db.createObjectStore(this.storeName, { keyPath: 'id', autoIncrement: true });
+          newStore.createIndex('isbn', 'isbn', { unique: false });
+          newStore.createIndex('titulo', 'titulo', { unique: false });
+          newStore.createIndex('autor', 'autor', { unique: false });
+          newStore.createIndex('fechaRegistro', 'fechaRegistro', { unique: false });
+          newStore.createIndex('library_id', 'library_id', { unique: false });
+          newStore.createIndex('user_id', 'user_id', { unique: false });
+          
+          // Copiar datos del old store al nuevo
+          oldStore.getAll().onsuccess = (e) => {
+            const allBooks = e.target.result;
+            if (allBooks && allBooks.length > 0) {
+              console.log(`Migrando ${allBooks.length} libros...`);
+              allBooks.forEach(book => {
+                // Eliminar el id para que autoIncrement lo genere
+                const { id, ...bookData } = book;
+                newStore.put(bookData);
+              });
+            }
+          };
+          console.log('Almacen de objetos "libros" creado (migrado desde "books").');
+        } else if (!db.objectStoreNames.contains(this.storeName)) {
           const store = db.createObjectStore(this.storeName, { keyPath: 'id', autoIncrement: true });
           store.createIndex('isbn', 'isbn', { unique: false });
           store.createIndex('titulo', 'titulo', { unique: false });
@@ -36,7 +78,7 @@ const storage = {
           store.createIndex('fechaRegistro', 'fechaRegistro', { unique: false });
           store.createIndex('library_id', 'library_id', { unique: false });
           store.createIndex('user_id', 'user_id', { unique: false });
-          console.log('Almacen de objetos "books" creado.');
+          console.log('Almacen de objetos "libros" creado.');
         }
         
         if (!db.objectStoreNames.contains(this.libraryStoreName)) {
@@ -358,21 +400,65 @@ const storage = {
     book.realPhotos = book.realPhotos || [];
     
     if (!book.user_id && auth.getUser()) book.user_id = auth.getUserId();
-    if (!book.library_id && this.currentLibraryId) book.library_id = this.currentLibraryId;
+    
+    // Asegurar que library_id tenga un valor válido
+    if (!book.library_id) {
+      if (this.currentLibraryId) {
+        book.library_id = this.currentLibraryId;
+      } else if (auth.getUser()) {
+        // Si no hay biblioteca seleccionada, intentar obtener la primera del usuario
+        const userLibraries = await this.getUserLibrariesIndexedDB(auth.getUserId());
+        if (userLibraries && userLibraries.length > 0) {
+          book.library_id = userLibraries[0].id;
+          this.currentLibraryId = userLibraries[0].id;
+          this.saveCurrentLibrary(userLibraries[0]);
+        } else {
+          // Crear una biblioteca por defecto si no hay ninguna
+          console.warn('No hay biblioteca seleccionada, creando una por defecto...');
+          const userId = auth.getUserId();
+          const defaultLib = {
+            nombre: 'Mi Biblioteca',
+            user_id: userId,
+            es_publica: false,
+            created_at: new Date().toISOString()
+          };
+          const savedLib = await this.saveLibraryIndexedDB(defaultLib);
+          book.library_id = savedLib.id;
+          this.currentLibraryId = savedLib.id;
+          this.saveCurrentLibrary(savedLib);
+        }
+      }
+    }
 
     if (this.isSupabaseEnabled && auth.getUser()) {
       try {
         const client = this.supabaseClient || auth.getClient();
         if (!client) throw new Error('Cliente no disponible');
         const supabaseBook = this.localToSupabaseBook(book);
+        console.log('Guardando en Supabase:', this.storeName, supabaseBook);
         let result;
         if (book.id !== undefined && book.id !== null && !isNaN(book.id)) {
+          console.log('Actualizando libro con id:', book.id);
           const { data, error } = await client.from(this.storeName).update(supabaseBook).eq('id', book.id).select();
-          if (error) throw error;
+          if (error) {
+            console.error('Error al actualizar en Supabase:', error);
+            throw error;
+          }
           result = this.supabaseToLocalBook(data[0]);
         } else {
+          console.log('Insertando nuevo libro');
           const { data, error } = await client.from(this.storeName).insert(supabaseBook).select();
-          if (error) throw error;
+          if (error) {
+            console.error('Error al insertar en Supabase:', error);
+            // Mejorar el mensaje de error para el usuario
+            if (error.code === '23503') {
+              throw new Error('Violación de clave foránea. Asegúrate de que user_id y library_id sean válidos.');
+            } else if (error.code === '23502') {
+              throw new Error('Campo obligatorio faltante. Asegúrate de que título y user_id estén definidos.');
+            } else {
+              throw error;
+            }
+          }
           result = this.supabaseToLocalBook(data[0]);
         }
         await this.saveBookIndexedDB(result);
