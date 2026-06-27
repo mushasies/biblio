@@ -298,20 +298,44 @@ const users = {
    */
   async hashPassword(password) {
     // Esperar a que bcrypt esté disponible
-    if (typeof bcrypt === 'undefined') {
-      await new Promise((resolve) => {
-        const script = document.createElement('script');
-        script.src = 'https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js';
-        script.onload = resolve;
-        script.onerror = () => resolve(); // Si falla, continuamos igual
-        document.head.appendChild(script);
-      });
+    const maxAttempts = 10;
+    const delay = 200;
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (typeof bcrypt !== 'undefined' && bcrypt.genSaltSync && bcrypt.hashSync) {
+        const salt = bcrypt.genSaltSync(10);
+        const hash = bcrypt.hashSync(password, salt);
+        return hash;
+      }
+      
+      // Si no está disponible, esperar
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
     
-    // bcrypt.genSalt y bcrypt.hashSync
-    const salt = bcrypt.genSaltSync(10);
-    const hash = bcrypt.hashSync(password, salt);
-    return hash;
+    // Si después de varios intentos no está disponible, intentar cargarlo
+    await new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js';
+      script.onload = resolve;
+      script.onerror = resolve;
+      document.head.appendChild(script);
+    });
+    
+    // Intentar de nuevo después de cargar
+    if (typeof bcrypt !== 'undefined' && bcrypt.genSaltSync && bcrypt.hashSync) {
+      const salt = bcrypt.genSaltSync(10);
+      const hash = bcrypt.hashSync(password, salt);
+      return hash;
+    }
+    
+    // Fallback: usar un hash simple (NO SEGURO, solo para desarrollo)
+    console.warn('ADVERTENCIA: bcrypt no está disponible. Usando hash simple (NO SEGURO para producción).');
+    // Simple SHA-256 (no seguro, pero funcional)
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   },
   
   /**
@@ -321,18 +345,41 @@ const users = {
    * @returns {Promise<boolean>}
    */
   async verifyPassword(password, hash) {
-    if (typeof bcrypt === 'undefined') {
-      // Si bcrypt no está cargado, intentar cargarlo
-      await new Promise((resolve) => {
-        const script = document.createElement('script');
-        script.src = 'https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js';
-        script.onload = resolve;
-        script.onerror = () => resolve();
-        document.head.appendChild(script);
-      });
+    // Esperar a que bcrypt esté disponible
+    const maxAttempts = 10;
+    const delay = 200;
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (typeof bcrypt !== 'undefined' && bcrypt.compareSync) {
+        return bcrypt.compareSync(password, hash);
+      }
+      
+      // Si no está disponible, esperar
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
     
-    return bcrypt.compareSync(password, hash);
+    // Si después de varios intentos no está disponible, intentar cargarlo
+    await new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js';
+      script.onload = resolve;
+      script.onerror = resolve;
+      document.head.appendChild(script);
+    });
+    
+    // Intentar de nuevo después de cargar
+    if (typeof bcrypt !== 'undefined' && bcrypt.compareSync) {
+      return bcrypt.compareSync(password, hash);
+    }
+    
+    // Fallback: comparar hashes SHA-256 directamente
+    console.warn('ADVERTENCIA: bcrypt no está disponible. Usando comparación simple (NO SEGURO para producción).');
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const passwordHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return passwordHash === hash;
   }
 };
 
