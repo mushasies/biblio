@@ -1,13 +1,15 @@
 const storage = {
   dbName: 'BiblioDB',
-  dbVersion: 1,
+  dbVersion: 2,
   storeName: 'books',
+  libraryStoreName: 'libraries',
   db: null,
-  isSupabaseEnabled: false, // Nuevo: Indica si Supabase está activo
+  isSupabaseEnabled: false,
+  supabaseClient: null,
+  libraries: [],
+  currentLibraryId: null,
 
-  // Inicializar la Base de Datos IndexedDB (y Supabase si está configurado)
-  async init() {
-    // Inicializar IndexedDB (siempre se usa como caché o fallback)
+  async init(supabaseClient = null) {
     await new Promise((resolve, reject) => {
       const request = indexedDB.open(this.dbName, this.dbVersion);
 
@@ -19,107 +21,308 @@ const storage = {
       request.onsuccess = (event) => {
         this.db = event.target.result;
         console.log('Base de datos IndexedDB inicializada correctamente.');
+        this.loadSavedLibrary();
         resolve(this.db);
       };
 
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
+        
         if (!db.objectStoreNames.contains(this.storeName)) {
-          // Usamos un id autoincremental como clave primaria
           const store = db.createObjectStore(this.storeName, { keyPath: 'id', autoIncrement: true });
-          
-          // Crear índices para búsquedas o clasificaciones rápidas
           store.createIndex('isbn', 'isbn', { unique: false });
           store.createIndex('titulo', 'titulo', { unique: false });
           store.createIndex('autor', 'autor', { unique: false });
           store.createIndex('fechaRegistro', 'fechaRegistro', { unique: false });
-          
-          console.log('Almacén de objetos "books" creado con éxito.');
+          store.createIndex('library_id', 'library_id', { unique: false });
+          store.createIndex('user_id', 'user_id', { unique: false });
+          console.log('Almacen de objetos "books" creado.');
+        }
+        
+        if (!db.objectStoreNames.contains(this.libraryStoreName)) {
+          const libStore = db.createObjectStore(this.libraryStoreName, { keyPath: 'id', autoIncrement: true });
+          libStore.createIndex('nombre', 'nombre', { unique: false });
+          libStore.createIndex('user_id', 'user_id', { unique: false });
+          libStore.createIndex('es_publica', 'es_publica', { unique: false });
+          console.log('Almacen de objetos "libraries" creado.');
         }
       };
     });
+    
+    if (supabaseClient) {
+      this.supabaseClient = supabaseClient;
+    }
   },
 
-  // Asegurar que la BD esté inicializada antes de cualquier operación
   async checkDb() {
     if (!this.db) {
       await this.init();
     }
   },
 
-  // Obtener todos los libros de la colección
-  async getAllBooks() {
-    if (this.isSupabaseEnabled && auth.getUser()) {
-      // Si Supabase está habilitado y el usuario logueado, usar Supabase
+  loadSavedLibrary() {
+    const savedLib = localStorage.getItem('biblio_current_library');
+    if (savedLib) {
       try {
-        const client = auth.getClient();
+        const lib = JSON.parse(savedLib);
+        this.currentLibraryId = lib.id;
+        console.log('Biblioteca cargada:', lib.nombre);
+      } catch (e) {
+        console.error('Error al cargar biblioteca:', e);
+      }
+    }
+  },
+
+  saveCurrentLibrary(library) {
+    localStorage.setItem('biblio_current_library', JSON.stringify(library));
+    this.currentLibraryId = library.id;
+  },
+
+  async setCurrentLibrary(libraryId) {
+    const library = await this.getLibrary(libraryId);
+    if (library) {
+      this.saveCurrentLibrary(library);
+      this.currentLibraryId = libraryId;
+    }
+  },
+
+  getCurrentLibrary() {
+    if (!this.currentLibraryId) return null;
+    return this.libraries.find(lib => lib.id === this.currentLibraryId);
+  },
+
+  // ============ BIBLIOTECAS ============
+
+  async getUserLibraries(userId = null) {
+    if (!userId && auth.getUser()) {
+      userId = auth.getUserId();
+    }
+    if (!userId) return [];
+
+    if (this.isSupabaseEnabled) {
+      try {
+        const client = this.supabaseClient || auth.getClient();
         if (!client) throw new Error('Cliente Supabase no disponible');
         
-        const userId = auth.getUserId();
-        
-        // Obtener solo los libros del usuario actual (o todos si es admin)
-        let query = client.from(this.storeName).select('*').order('fechaRegistro', { ascending: false });
-        
+        let query = client.from(this.libraryStoreName).select('*').order('nombre', { ascending: true });
         if (!auth.isAdmin()) {
-          // Si no es admin, filtrar por user_id
           query = query.eq('user_id', userId);
         }
         
         const { data, error } = await query;
         if (error) throw error;
         
-        // Actualizar IndexedDB con los datos de Supabase para caché offline
-        await this.syncToIndexedDB(data);
-        return data.map(this.supabaseToLocalBook); // Adaptar formato si es necesario
+        this.libraries = data.map(this.supabaseToLocalLibrary);
+        await this.syncLibrariesToIndexedDB(data);
+        return this.libraries;
       } catch (error) {
-        console.error("Error al obtener libros de Supabase:", error.message);
-        // En caso de error, intentar con IndexedDB como fallback
+        console.error('Error bibliotecas Supabase:', error.message);
+        return this.getUserLibrariesIndexedDB(userId);
+      }
+    } else {
+      return this.getUserLibrariesIndexedDB(userId);
+    }
+  },
+
+  async getUserLibrariesIndexedDB(userId) {
+    await this.checkDb();
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction([this.libraryStoreName], 'readonly');
+      const store = transaction.objectStore(this.libraryStoreName);
+      const index = store.index('user_id');
+      const request = userId ? index.getAll(userId) : store.getAll();
+      request.onsuccess = () => {
+        this.libraries = request.result || [];
+        resolve(this.libraries);
+      };
+      request.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  async getLibrary(libraryId) {
+    if (this.isSupabaseEnabled) {
+      try {
+        const client = this.supabaseClient || auth.getClient();
+        if (!client) throw new Error('Cliente no disponible');
+        const userId = auth.getUserId();
+        let query = client.from(this.libraryStoreName).select('*').eq('id', libraryId);
+        if (!auth.isAdmin()) {
+          query = query.eq('user_id', userId);
+        }
+        const { data, error } = await query.single();
+        if (error) throw error;
+        return data ? this.supabaseToLocalLibrary(data) : null;
+      } catch (error) {
+        return this.getLibraryIndexedDB(libraryId);
+      }
+    } else {
+      return this.getLibraryIndexedDB(libraryId);
+    }
+  },
+
+  async getLibraryIndexedDB(libraryId) {
+    await this.checkDb();
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction([this.libraryStoreName], 'readonly');
+      const store = transaction.objectStore(this.libraryStoreName);
+      const request = store.get(Number(libraryId));
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  async createLibrary(nombre, userId = null, es_publica = false) {
+    if (!userId && auth.getUser()) {
+      userId = auth.getUserId();
+    }
+    if (!userId) throw new Error('Necesitas estar autenticado');
+
+    const library = {
+      nombre: nombre.trim(),
+      user_id: userId,
+      es_publica: es_publica,
+      created_at: new Date().toISOString()
+    };
+
+    if (this.isSupabaseEnabled) {
+      try {
+        const client = this.supabaseClient || auth.getClient();
+        if (!client) throw new Error('Cliente no disponible');
+        const { data, error } = await client.from(this.libraryStoreName).insert(library).select();
+        if (error) throw error;
+        const newLib = this.supabaseToLocalLibrary(data[0]);
+        this.libraries.push(newLib);
+        await this.saveLibraryIndexedDB(newLib);
+        if (this.libraries.length === 1) {
+          this.saveCurrentLibrary(newLib);
+        }
+        return newLib;
+      } catch (error) {
+        return this.saveLibraryIndexedDB(library);
+      }
+    } else {
+      return this.saveLibraryIndexedDB(library);
+    }
+  },
+
+  async saveLibraryIndexedDB(library) {
+    await this.checkDb();
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction([this.libraryStoreName], 'readwrite');
+      const store = transaction.objectStore(this.libraryStoreName);
+      const request = store.put(library);
+      request.onsuccess = () => {
+        library.id = request.result;
+        resolve(library);
+      };
+      request.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  async syncLibrariesToIndexedDB(supabaseLibraries) {
+    await this.checkDb();
+    const transaction = this.db.transaction([this.libraryStoreName], 'readwrite');
+    const store = transaction.objectStore(this.libraryStoreName);
+    await store.clear();
+    for (const sLib of supabaseLibraries) {
+      const localLib = this.supabaseToLocalLibrary(sLib);
+      store.put(localLib);
+    }
+  },
+
+  supabaseToLocalLibrary(sLib) {
+    return {
+      id: sLib.id,
+      nombre: sLib.nombre,
+      user_id: sLib.user_id,
+      es_publica: sLib.es_publica || false,
+      created_at: sLib.created_at || new Date().toISOString()
+    };
+  },
+
+  // ============ LIBROS ============
+
+  async getAllBooks(libraryId = null) {
+    if (!libraryId && this.currentLibraryId) {
+      libraryId = this.currentLibraryId;
+    }
+    
+    if (auth.isAdmin() && !libraryId) {
+      return this.getAllBooksForAdmin();
+    }
+    
+    if (!auth.getUser()) {
+      return this.getAllBooksIndexedDB(null, null);
+    }
+
+    if (this.isSupabaseEnabled) {
+      try {
+        const client = this.supabaseClient || auth.getClient();
+        if (!client) throw new Error('Cliente no disponible');
+        const userId = auth.getUserId();
+        let query = client.from(this.storeName).select('*').order('fechaRegistro', { ascending: false });
+        if (libraryId) query = query.eq('library_id', libraryId);
+        if (!auth.isAdmin()) query = query.eq('user_id', userId);
+        const { data, error } = await query;
+        if (error) throw error;
+        await this.syncBooksToIndexedDB(data);
+        return data.map(this.supabaseToLocalBook);
+      } catch (error) {
+        return this.getAllBooksIndexedDB(libraryId, auth.getUserId());
+      }
+    } else {
+      return this.getAllBooksIndexedDB(libraryId, auth.getUserId());
+    }
+  },
+
+  async getAllBooksForAdmin() {
+    if (!auth.isAdmin()) return this.getAllBooks();
+    if (this.isSupabaseEnabled) {
+      try {
+        const client = this.supabaseClient || auth.getClient();
+        if (!client) throw new Error('Cliente no disponible');
+        const { data, error } = await client.from(this.storeName).select('*').order('fechaRegistro', { ascending: false });
+        if (error) throw error;
+        await this.syncBooksToIndexedDB(data);
+        return data.map(this.supabaseToLocalBook);
+      } catch (error) {
         return this.getAllBooksIndexedDB();
       }
     } else {
-      // Si no hay Supabase o no está logueado, usar IndexedDB
       return this.getAllBooksIndexedDB();
     }
   },
 
-  async getAllBooksIndexedDB() {
+  async getAllBooksIndexedDB(libraryId = null, userId = null) {
     await this.checkDb();
     return new Promise((resolve, reject) => {
       const transaction = this.db.transaction([this.storeName], 'readonly');
       const store = transaction.objectStore(this.storeName);
       const request = store.getAll();
-
-      request.onsuccess = () => resolve(request.result || []);
+      request.onsuccess = () => {
+        const allBooks = request.result || [];
+        const filtered = allBooks.filter(b => 
+          (!libraryId || b.library_id === libraryId) && 
+          (!userId || b.user_id === userId)
+        );
+        resolve(filtered);
+      };
       request.onerror = (e) => reject(e.target.error);
     });
   },
 
-  // Obtener un libro específico por su ID
   async getBook(id) {
     if (this.isSupabaseEnabled && auth.getUser()) {
       try {
-        const client = auth.getClient();
-        if (!client) throw new Error('Cliente Supabase no disponible');
-        
+        const client = this.supabaseClient || auth.getClient();
+        if (!client) throw new Error('Cliente no disponible');
         const userId = auth.getUserId();
-        
-        // Obtener el libro, verificando que pertenece al usuario (o es admin)
         let query = client.from(this.storeName).select('*').eq('id', id);
-        
-        if (!auth.isAdmin()) {
-          query = query.eq('user_id', userId);
-        }
-        
+        if (!auth.isAdmin()) query = query.eq('user_id', userId);
         const { data, error } = await query.single();
         if (error) throw error;
-        
-        if (!data) {
-          throw new Error('Libro no encontrado o no tienes permisos para acceder a él');
-        }
-        
-        return this.supabaseToLocalBook(data);
+        return data ? this.supabaseToLocalBook(data) : null;
       } catch (error) {
-        console.error("Error al obtener libro de Supabase:", error.message);
         return this.getBookIndexedDB(id);
       }
     } else {
@@ -133,54 +336,41 @@ const storage = {
       const transaction = this.db.transaction([this.storeName], 'readonly');
       const store = transaction.objectStore(this.storeName);
       const request = store.get(Number(id));
-
       request.onsuccess = () => resolve(request.result);
       request.onerror = (e) => reject(e.target.error);
     });
   },
 
-  // Guardar (añadir o actualizar) un libro
   async saveBook(book) {
-    // Preparar el objeto book para IndexedDB y Supabase
-    if (!book.fechaRegistro) {
-      book.fechaRegistro = new Date().toISOString();
-    }
+    if (!book.fechaRegistro) book.fechaRegistro = new Date().toISOString();
     book.precioCompra = book.precioCompra ? parseFloat(book.precioCompra) : null;
     book.precioVenta = book.precioVenta ? parseFloat(book.precioVenta) : null;
     book.realPhotos = book.realPhotos || [];
+    
+    if (!book.user_id && auth.getUser()) book.user_id = auth.getUserId();
+    if (!book.library_id && this.currentLibraryId) book.library_id = this.currentLibraryId;
 
     if (this.isSupabaseEnabled && auth.getUser()) {
-      // Si Supabase está activo, guardar en la nube
       try {
-        const client = auth.getClient();
-        if (!client) throw new Error('Cliente Supabase no disponible');
-        
-        const supabaseBook = this.localToSupabaseBook(book, auth.getUser().id);
-        
+        const client = this.supabaseClient || auth.getClient();
+        if (!client) throw new Error('Cliente no disponible');
+        const supabaseBook = this.localToSupabaseBook(book);
         let result;
         if (book.id) {
-          // Actualizar en Supabase
           const { data, error } = await client.from(this.storeName).update(supabaseBook).eq('id', book.id).select();
           if (error) throw error;
           result = this.supabaseToLocalBook(data[0]);
         } else {
-          // Insertar en Supabase
           const { data, error } = await client.from(this.storeName).insert(supabaseBook).select();
           if (error) throw error;
           result = this.supabaseToLocalBook(data[0]);
         }
-
-        // También guardar en IndexedDB para mantener caché offline
         await this.saveBookIndexedDB(result);
         return result;
       } catch (error) {
-        console.error("Error al guardar en Supabase:", error.message);
-        // Fallback a IndexedDB
         return this.saveBookIndexedDB(book);
       }
-
     } else {
-      // Si no hay Supabase o no está logueado, solo guardar en IndexedDB
       return this.saveBookIndexedDB(book);
     }
   },
@@ -190,47 +380,31 @@ const storage = {
     return new Promise((resolve, reject) => {
       const transaction = this.db.transaction([this.storeName], 'readwrite');
       const store = transaction.objectStore(this.storeName);
-      
       const request = store.put(book);
-
       request.onsuccess = (e) => {
-        book.id = e.target.result; // Asignar el ID generado o existente al objeto
+        book.id = e.target.result;
         resolve(book);
       };
       request.onerror = (e) => reject(e.target.error);
     });
   },
 
-  // Eliminar un libro por su ID
   async deleteBook(id) {
     if (this.isSupabaseEnabled && auth.getUser()) {
-      // Eliminar de Supabase
       try {
-        const client = auth.getClient();
-        if (!client) throw new Error('Cliente Supabase no disponible');
-        
+        const client = this.supabaseClient || auth.getClient();
+        if (!client) throw new Error('Cliente no disponible');
         const userId = auth.getUserId();
-        
-        // Eliminar el libro, verificando que pertenece al usuario (o es admin)
         let query = client.from(this.storeName).delete().eq('id', id);
-        
-        if (!auth.isAdmin()) {
-          query = query.eq('user_id', userId);
-        }
-        
+        if (!auth.isAdmin()) query = query.eq('user_id', userId);
         const { error } = await query;
         if (error) throw error;
-        
-        // También eliminar de IndexedDB
         await this.deleteBookIndexedDB(id);
         return true;
       } catch (error) {
-        console.error("Error al eliminar de Supabase:", error.message);
-        // Fallback a IndexedDB
         return this.deleteBookIndexedDB(id);
       }
     } else {
-      // Eliminar solo de IndexedDB
       return this.deleteBookIndexedDB(id);
     }
   },
@@ -241,53 +415,47 @@ const storage = {
       const transaction = this.db.transaction([this.storeName], 'readwrite');
       const store = transaction.objectStore(this.storeName);
       const request = store.delete(Number(id));
-
       request.onsuccess = () => resolve(true);
       request.onerror = (e) => reject(e.target.error);
     });
   },
 
-  // Sincronizar todos los libros de Supabase a IndexedDB
-  async syncToIndexedDB(supabaseBooks) {
+  async syncBooksToIndexedDB(supabaseBooks) {
     await this.checkDb();
     const transaction = this.db.transaction([this.storeName], 'readwrite');
     const store = transaction.objectStore(this.storeName);
-
-    // Limpiar IndexedDB antes de resincronizar (o podrías hacer merges más complejos)
     await store.clear();
-
     for (const sBook of supabaseBooks) {
       const localBook = this.supabaseToLocalBook(sBook);
       store.put(localBook);
     }
-    console.log(`Sincronizados ${supabaseBooks.length} libros de Supabase a IndexedDB.`);
   },
 
-  // Adaptar el formato de libro de Supabase al formato local
-  supabaseToLocalBook(supabaseBook) {
+  supabaseToLocalBook(sBook) {
     return {
-      id: supabaseBook.id,
-      titulo: supabaseBook.titulo,
-      autor: supabaseBook.autor,
-      isbn: supabaseBook.isbn,
-      editorial: supabaseBook.editorial,
-      anio: supabaseBook.anio,
-      descripcion: supabaseBook.descripcion,
-      portadaUrl: supabaseBook.portada_url,
-      precioCompra: supabaseBook.precio_compra,
-      precioVenta: supabaseBook.precio_venta,
-      fechaCompra: supabaseBook.fecha_compra,
-      realPhotos: supabaseBook.real_photos || [],
-      fechaRegistro: supabaseBook.fecha_registro || new Date().toISOString(),
-      user_id: supabaseBook.user_id  // Incluir user_id para sincronización
+      id: sBook.id,
+      titulo: sBook.titulo,
+      autor: sBook.autor,
+      isbn: sBook.isbn,
+      editorial: sBook.editorial,
+      anio: sBook.anio,
+      descripcion: sBook.descripcion,
+      portadaUrl: sBook.portada_url,
+      precioCompra: sBook.precio_compra,
+      precioVenta: sBook.precio_venta,
+      fechaCompra: sBook.fecha_compra,
+      realPhotos: sBook.real_photos || [],
+      fechaRegistro: sBook.fecha_registro || new Date().toISOString(),
+      user_id: sBook.user_id,
+      library_id: sBook.library_id
     };
   },
 
-  // Adaptar el formato de libro local al formato de Supabase
-  localToSupabaseBook(localBook, userId) {
+  localToSupabaseBook(localBook) {
     return {
-      id: localBook.id || undefined, // Supabase genera el ID si no existe
-      user_id: userId,
+      id: localBook.id || undefined,
+      user_id: localBook.user_id,
+      library_id: localBook.library_id || this.currentLibraryId,
       titulo: localBook.titulo,
       autor: localBook.autor,
       isbn: localBook.isbn,
@@ -299,7 +467,7 @@ const storage = {
       precio_venta: localBook.precioVenta,
       fecha_compra: localBook.fechaCompra,
       real_photos: localBook.realPhotos,
-      fecha_registro: localBook.fechaRegistro || new Date().toISOString(),
+      fecha_registro: localBook.fechaRegistro || new Date().toISOString()
     };
   }
 };

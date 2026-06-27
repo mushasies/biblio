@@ -182,9 +182,19 @@ const auth = {
         console.log('Sesión cerrada.');
     },
     
+    // Inicializar auth
+    async init() {
+        await this.initSupabase();
+    },
+    
     // Obtener la sesión actual
     getSession() {
         return this.currentSession;
+    },
+    
+    // Obtener perfil del usuario (para compatibilidad)
+    getProfile() {
+        return this.getUser();
     },
     
     // Obtener el usuario actual
