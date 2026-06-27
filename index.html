@@ -516,6 +516,7 @@ Guardar Libro
 <div class="p-6 space-y-4">
 <p class="text-sm text-slate-600">
 Para habilitar la sincronización en la nube, introduce las credenciales de tu proyecto Supabase:
+<br><strong class="text-primary-600">La SERVICE KEY es obligatoria para registrar usuarios.</strong>
 </p>
 <form id="supabase-config-form" class="space-y-4">
 <div>
@@ -524,15 +525,15 @@ Para habilitar la sincronización en la nube, introduce las credenciales de tu p
 class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
 </div>
 <div>
-<label class="block text-xs font-bold text-slate-500 mb-1">Clave Anónima (anon key)</label>
+<label class="block text-xs font-bold text-slate-500 mb-1">Clave Anónima (anon key) <span class="text-slate-400">(solo lectura)</span></label>
 <input type="password" id="supabase-anon-key-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." 
 class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
 </div>
 <div>
-<label class="block text-xs font-bold text-slate-500 mb-1">Clave de Servicio (service key) <span class="text-slate-400">(opcional, para acceso completo)</span></label>
+<label class="block text-xs font-bold text-slate-500 mb-1">Clave de Servicio (service key) <span class="text-red-500">*</span></label>
 <input type="password" id="supabase-service-key-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." 
 class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-<p class="text-[10px] text-slate-400 mt-1">⚠️ Solo para desarrollo. NO uses esto en producción.</p>
+<p class="text-[10px] text-slate-400 mt-1">⚠️ Obligatoria para registrar usuarios. NO la expongas en producción.</p>
 </div>
 <div class="flex gap-3 pt-2">
 <button type="button" onclick="app.closeSupabaseConfigModal()" 

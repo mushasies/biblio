@@ -400,6 +400,7 @@ const app = {
             modal.classList.remove("hidden");
             document.getElementById("supabase-url-input").value = localStorage.getItem("supabaseUrl") || "";
             document.getElementById("supabase-anon-key-input").value = localStorage.getItem("supabaseAnonKey") || "";
+            document.getElementById("supabase-service-key-input").value = localStorage.getItem("supabaseServiceKey") || "";
         }
     },
 
@@ -414,23 +415,38 @@ const app = {
         const anonKey = document.getElementById("supabase-anon-key-input").value.trim();
         const serviceKey = document.getElementById("supabase-service-key-input").value.trim();
 
-        if (url && anonKey) {
-            localStorage.setItem("supabaseUrl", url);
-            localStorage.setItem("supabaseAnonKey", anonKey);
-            if (serviceKey) {
-                localStorage.setItem("supabaseServiceKey", serviceKey);
-            } else {
-                if (confirm("ADVERTENCIA: Sin la SERVICE KEY, no podras registrar usuarios. ¿Continuar de todos modos?")) {
-                    // Continuar
-                } else {
-                    return;
-                }
-            }
-            this.closeSupabaseConfigModal();
-            auth.initSupabase();
-        } else {
-            alert("Por favor, introduce al menos la URL y la Clave Anon de Supabase.");
+        // Validar que al menos tengamos URL
+        if (!url) {
+            alert("Por favor, introduce la URL de tu proyecto Supabase.");
+            return;
         }
+
+        // Validar que tengamos al menos una clave
+        if (!anonKey && !serviceKey) {
+            alert("Por favor, introduce al menos la URL y una clave (ANON KEY o SERVICE KEY). La SERVICE KEY es obligatoria para registrar usuarios.");
+            return;
+        }
+
+        // Guardar configuración
+        localStorage.setItem("supabaseUrl", url);
+        
+        if (anonKey) {
+            localStorage.setItem("supabaseAnonKey", anonKey);
+        }
+        
+        if (serviceKey) {
+            localStorage.setItem("supabaseServiceKey", serviceKey);
+        }
+
+        // Advertencia si solo se usa anon key (no podrá registrar usuarios)
+        if (anonKey && !serviceKey) {
+            if (!confirm("ADVERTENCIA: Con solo la ANON KEY no podrás registrar usuarios ni guardar libros. Necesitas la SERVICE KEY o desactivar RLS en Supabase. ¿Continuar de todos modos?")) {
+                return;
+            }
+        }
+
+        this.closeSupabaseConfigModal();
+        auth.initSupabase();
     },
 
     // Modal de autenticacion
