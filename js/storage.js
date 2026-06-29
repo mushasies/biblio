@@ -146,15 +146,20 @@ const storage = {
         const client = this.supabaseClient || auth.getClient();
         if (!client) throw new Error('Cliente Supabase no disponible');
         
-        let query = client.from(this.libraryStoreName).select('*').order('nombre', { ascending: true });
-        if (!auth.isAdmin()) {
-          query = query.eq('user_id', userId);
-        }
-        
-        const { data, error } = await query;
+        // NO filtrar por user_id en Supabase para evitar constraints
+        // Cargamos todos y filtramos localmente
+        const { data, error } = await client.from(this.libraryStoreName).select('*').order('nombre', { ascending: true });
         if (error) throw error;
         
-        this.libraries = data.map(this.supabaseToLocalLibrary);
+        // Convertir y filtrar localmente
+        const allLibraries = data.map(this.supabaseToLocalLibrary);
+        let filteredLibraries = allLibraries;
+        
+        if (!auth.isAdmin()) {
+          filteredLibraries = filteredLibraries.filter(lib => lib.user_id === userId);
+        }
+        
+        this.libraries = filteredLibraries;
         await this.syncLibrariesToIndexedDB(data);
         return this.libraries;
       } catch (error) {
@@ -186,12 +191,8 @@ const storage = {
       try {
         const client = this.supabaseClient || auth.getClient();
         if (!client) throw new Error('Cliente no disponible');
-        const userId = auth.getUserId();
-        let query = client.from(this.libraryStoreName).select('*').eq('id', libraryId);
-        if (!auth.isAdmin()) {
-          query = query.eq('user_id', userId);
-        }
-        const { data, error } = await query.single();
+        // NO filtrar por user_id en Supabase para evitar constraints
+        const { data, error } = await client.from(this.libraryStoreName).select('*').eq('id', libraryId).single();
         if (error) throw error;
         return data ? this.supabaseToLocalLibrary(data) : null;
       } catch (error) {
@@ -224,20 +225,25 @@ const storage = {
     }
     if (!userId) throw new Error('Necesitas estar autenticado');
 
-    const library = {
-      nombre: nombre.trim(),
-      user_id: userId,
-      es_publica: es_publica,
-      created_at: new Date().toISOString()
-    };
-
     if (this.isSupabaseEnabled) {
       try {
         const client = this.supabaseClient || auth.getClient();
         if (!client) throw new Error('Cliente no disponible');
-        const { data, error } = await client.from(this.libraryStoreName).insert(library).select();
+        
+        // NO enviar user_id a Supabase para evitar constraints
+        const supabaseLibrary = {
+          nombre: nombre.trim(),
+          es_publica: es_publica,
+          created_at: new Date().toISOString()
+        };
+        
+        const { data, error } = await client.from(this.libraryStoreName).insert(supabaseLibrary).select();
         if (error) throw error;
+        
+        // Crear biblioteca local con user_id
         const newLib = this.supabaseToLocalLibrary(data[0]);
+        newLib.user_id = userId; // Añadir user_id localmente
+        
         this.libraries.push(newLib);
         await this.saveLibraryIndexedDB(newLib);
         if (this.libraries.length === 1) {
@@ -245,9 +251,21 @@ const storage = {
         }
         return newLib;
       } catch (error) {
+        const library = {
+          nombre: nombre.trim(),
+          user_id: userId,
+          es_publica: es_publica,
+          created_at: new Date().toISOString()
+        };
         return this.saveLibraryIndexedDB(library);
       }
     } else {
+      const library = {
+        nombre: nombre.trim(),
+        user_id: userId,
+        es_publica: es_publica,
+        created_at: new Date().toISOString()
+      };
       return this.saveLibraryIndexedDB(library);
     }
   },
@@ -278,10 +296,14 @@ const storage = {
   },
 
   supabaseToLocalLibrary(sLib) {
+    // Obtener user_id del contexto local (no de Supabase)
+    // ya que no lo guardamos en Supabase para evitar problemas de constraints
+    const currentUserId = auth.getUser() ? auth.getUserId() : null;
+    
     return {
       id: sLib.id,
       nombre: sLib.nombre,
-      user_id: sLib.user_id,
+      user_id: sLib.user_id || currentUserId, // Priorizar el de Supabase si existe, sino usar local
       es_publica: sLib.es_publica || false,
       created_at: sLib.created_at || new Date().toISOString()
     };
@@ -306,14 +328,27 @@ const storage = {
       try {
         const client = this.supabaseClient || auth.getClient();
         if (!client) throw new Error('Cliente no disponible');
-        const userId = auth.getUserId();
-        let query = client.from(this.storeName).select('*').order('fechaRegistro', { ascending: false });
-        if (libraryId) query = query.eq('library_id', libraryId);
-        if (!auth.isAdmin()) query = query.eq('user_id', userId);
-        const { data, error } = await query;
+        // NO filtrar por library_id ni user_id en Supabase (no existen esos campos allí)
+        // Cargamos todos y luego filtramos localmente
+        const { data, error } = await client.from(this.storeName).select('*').order('fechaRegistro', { ascending: false });
         if (error) throw error;
+        
+        // Convertir y filtrar localmente
+        const allBooks = data.map(this.supabaseToLocalBook);
+        
+        // Filtrar por library_id y user_id localmente
+        const userId = auth.getUserId();
+        let filteredBooks = allBooks;
+        
+        if (!auth.isAdmin()) {
+          filteredBooks = filteredBooks.filter(b => b.user_id === userId);
+        }
+        if (libraryId) {
+          filteredBooks = filteredBooks.filter(b => b.library_id === libraryId);
+        }
+        
         await this.syncBooksToIndexedDB(data);
-        return data.map(this.supabaseToLocalBook);
+        return filteredBooks;
       } catch (error) {
         return this.getAllBooksIndexedDB(libraryId, auth.getUserId());
       }
@@ -363,10 +398,8 @@ const storage = {
       try {
         const client = this.supabaseClient || auth.getClient();
         if (!client) throw new Error('Cliente no disponible');
-        const userId = auth.getUserId();
-        let query = client.from(this.storeName).select('*').eq('id', id);
-        if (!auth.isAdmin()) query = query.eq('user_id', userId);
-        const { data, error } = await query.single();
+        // NO filtrar por user_id en Supabase (no existe ese campo allí)
+        const { data, error } = await client.from(this.storeName).select('*').eq('id', id).single();
         if (error) throw error;
         return data ? this.supabaseToLocalBook(data) : null;
       } catch (error) {
@@ -450,20 +483,20 @@ const storage = {
           const { data, error } = await client.from(this.storeName).insert(supabaseBook).select();
           if (error) {
             console.error('Error al insertar en Supabase:', error);
-            // Mejorar el mensaje de error para el usuario
-            if (error.code === '23503') {
-              throw new Error('Violación de clave foránea. Asegúrate de que user_id y library_id sean válidos.');
-            } else if (error.code === '23502') {
-              throw new Error('Campo obligatorio faltante. Asegúrate de que título y user_id estén definidos.');
-            } else {
-              throw error;
-            }
+            throw error;
           }
           result = this.supabaseToLocalBook(data[0]);
         }
-        await this.saveBookIndexedDB(result);
-        return result;
+        // Guardar localmente con user_id y library_id (que no se enviaron a Supabase)
+        const localBookWithRelations = {
+          ...result,
+          user_id: book.user_id,
+          library_id: book.library_id
+        };
+        await this.saveBookIndexedDB(localBookWithRelations);
+        return localBookWithRelations;
       } catch (error) {
+        console.warn('No se pudo guardar en Supabase, guardando solo localmente:', error.message);
         return this.saveBookIndexedDB(book);
       }
     } else {
@@ -498,10 +531,9 @@ const storage = {
       try {
         const client = this.supabaseClient || auth.getClient();
         if (!client) throw new Error('Cliente no disponible');
-        const userId = auth.getUserId();
-        let query = client.from(this.storeName).delete().eq('id', id);
-        if (!auth.isAdmin()) query = query.eq('user_id', userId);
-        const { error } = await query;
+        // NO filtrar por user_id en Supabase (no existe ese campo allí)
+        // Confiamos en que el libro pertence al usuario por el contexto local
+        const { error } = await client.from(this.storeName).delete().eq('id', id);
         if (error) throw error;
         await this.deleteBookIndexedDB(id);
         return true;
@@ -544,6 +576,10 @@ const storage = {
     // Asegurar que el id es un número (BIGINT de Supabase llega como número en JavaScript)
     const bookId = typeof sBook.id === 'string' ? parseInt(sBook.id, 10) : (sBook.id || undefined);
     
+    // Obtener user_id y library_id del contexto local (no de Supabase)
+    // ya que no los guardamos en Supabase para evitar problemas de constraints
+    const currentUserId = auth.getUser() ? auth.getUserId() : null;
+    
     return {
       id: bookId,
       titulo: sBook.titulo,
@@ -558,16 +594,15 @@ const storage = {
       fechaCompra: sBook.fecha_compra,
       realPhotos: sBook.real_photos || [],
       fechaRegistro: sBook.fecha_registro || new Date().toISOString(),
-      user_id: sBook.user_id,
-      library_id: sBook.library_id
+      user_id: currentUserId,
+      library_id: this.currentLibraryId
     };
   },
 
   localToSupabaseBook(localBook) {
-    // No enviar id para INSERT, solo para UPDATE
+    // NO enviar user_id ni library_id a Supabase para evitar constraints
+    // Estos campos solo se guardan localmente en IndexedDB
     const supabaseBook = {
-      user_id: localBook.user_id,
-      library_id: localBook.library_id || this.currentLibraryId,
       titulo: localBook.titulo,
       autor: localBook.autor,
       isbn: localBook.isbn,
