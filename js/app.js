@@ -126,8 +126,21 @@ const app = {
     async onUserAuthenticated(user) {
         this.currentUser = user;
 
-        // Obtener perfil del usuario
-        const { data: perfil } = await obtenerPerfil();
+        // Asegurar que app.supabase esté disponible usando el cliente de auth si es necesario
+        if (!this.supabase && typeof auth !== 'undefined' && auth.getClient) {
+            this.supabase = auth.getClient();
+        }
+
+        // Obtener perfil del usuario (proteger contra errores si no hay tabla de perfiles)
+        let perfil = null;
+        try {
+            const perfilResult = await obtenerPerfil();
+            perfil = perfilResult.data;
+        } catch (error) {
+            console.warn('No se pudo obtener perfil:', error.message);
+            // Continuar sin perfil si hay error
+        }
+        
         this.isAdmin = perfil?.es_admin || false;
 
         // Cargar bibliotecas
@@ -204,6 +217,92 @@ const app = {
             loginBtn?.classList.remove('border-primary-500', 'text-primary-600');
             signupContent?.classList.add('active');
             loginContent?.classList.remove('active');
+        }
+    },
+
+    // Manejadores de submit para formularios de autenticación
+    async handleLoginSubmit(event) {
+        event.preventDefault();
+        console.log('Manejo de submit de login');
+        
+        const email = document.getElementById('login-email').value.trim();
+        const password = document.getElementById('login-password').value;
+        
+        if (!email || !password) {
+            alert('Por favor, completa todos los campos');
+            return;
+        }
+        
+        try {
+            // Verificar que auth esté disponible
+            if (typeof auth === 'undefined' || !auth.signIn) {
+                console.error('auth no está disponible o no tiene método signIn');
+                alert('Error: Sistema de autenticación no disponible');
+                return;
+            }
+            
+            console.log('Intentando iniciar sesión con:', email);
+            const user = await auth.signIn(email, password);
+            console.log('Login exitoso:', user);
+            
+            // Cerrar modal de auth
+            this.closeAuthModal();
+            
+            // Actualizar usuario actual y llamar directamente a onUserAuthenticated
+            this.currentUser = user;
+            await this.onUserAuthenticated(user);
+            
+            // También actualizar la UI
+            this.updateUIForAuthState();
+            
+        } catch (error) {
+            console.error('Error en login:', error.message);
+            alert('Error al iniciar sesión: ' + error.message);
+        }
+    },
+
+    async handleSignupSubmit(event) {
+        event.preventDefault();
+        console.log('Manejo de submit de registro');
+        
+        const email = document.getElementById('signup-email').value.trim();
+        const password = document.getElementById('signup-password').value;
+        
+        if (!email || !password) {
+            alert('Por favor, completa todos los campos');
+            return;
+        }
+        
+        if (password.length < 6) {
+            alert('La contraseña debe tener al menos 6 caracteres');
+            return;
+        }
+        
+        try {
+            // Verificar que auth esté disponible
+            if (typeof auth === 'undefined' || !auth.signUp) {
+                console.error('auth no está disponible o no tiene método signUp');
+                alert('Error: Sistema de autenticación no disponible');
+                return;
+            }
+            
+            console.log('Intentando registrar usuario con:', email);
+            const user = await auth.signUp(email, password);
+            console.log('Registro exitoso:', user);
+            
+            // Cerrar modal de auth
+            this.closeAuthModal();
+            
+            // Actualizar usuario actual y llamar directamente a onUserAuthenticated
+            this.currentUser = user;
+            await this.onUserAuthenticated(user);
+            
+            // También actualizar la UI
+            this.updateUIForAuthState();
+            
+        } catch (error) {
+            console.error('Error en registro:', error.message);
+            alert('Error al registrar usuario: ' + error.message);
         }
     },
 
