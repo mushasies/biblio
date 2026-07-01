@@ -254,15 +254,20 @@ async function obtenerFotosLibro(libroId) {
 
 async function obtenerPerfil() {
     const userId = app.currentUser?.id;
-    if (!userId) return { data: null, error: null };
+    if (!userId || !app.supabase) return { data: null, error: null };
 
-    const { data, error } = await app.supabase
-        .from('perfiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+    try {
+        const { data, error } = await app.supabase
+            .from('perfiles')
+            .select('*')
+            .eq('id', userId)
+            .single();
 
-    return { data, error };
+        return { data, error };
+    } catch (error) {
+        console.error('Error al obtener perfil:', error);
+        return { data: null, error: error.message };
+    }
 }
 
 async function actualizarPerfil(perfilData) {

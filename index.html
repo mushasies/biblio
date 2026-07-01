@@ -97,10 +97,10 @@ display: block;
 }
 </style>
 </head>
-<body class="h-full flex flex-col overflow-hidden text-slate-800" style="opacity: 0;">
+<body class="h-full flex flex-col overflow-hidden text-slate-800">
 
 <!-- SPLASH SCREEN (Carga inicial) -->
-<div id="loading-splash" class="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center">
+<div id="loading-splash" class="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center" style="opacity: 1;">
 <div class="mb-4">
 <div class="w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center shadow-lg">
 <i data-lucide="book-open" class="text-white w-8 h-8"></i>
@@ -636,23 +636,13 @@ Registrarse
 <script src="js/app.js"></script>
 
 <script>
-// Mostrar el cuerpo de la app una vez que todo este listo
-function showAppBody() {
-  const body = document.querySelector('body');
-  if (body) {
-    body.style.opacity = '1';
-    body.style.transition = 'opacity 0.3s ease';
-  }
-}
-
-// Ocultar splash screen y mostrar la app una vez que todo este cargado
+// Ocultar splash screen una vez que todo este cargado
 function hideSplashScreen() {
   const splash = document.getElementById("loading-splash");
   if (splash) {
     splash.style.opacity = "0";
     setTimeout(() => {
       splash.classList.add("hidden");
-      showAppBody();
     }, 500); // Coincide con la duracion de la transicion
   }
 }

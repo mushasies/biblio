@@ -15,18 +15,23 @@ const app = {
     // =============================================
 
     async init() {
+        console.log('app.init() - Iniciando...');
         try {
             // Escuchar evento para mostrar modal de configuración de Supabase
             document.addEventListener('showSupabaseConfig', () => {
+                console.log('Evento showSupabaseConfig recibido');
                 this.showSupabaseConfigModal();
             });
             
             // Escuchar eventos de cambio de autenticación desde auth.js
             document.addEventListener('authChange', async (e) => {
+                console.log('Evento authChange recibido:', e.detail);
                 if (e.detail && e.detail.user) {
                     this.currentUser = e.detail.user;
+                    console.log('Usuario detectado, ejecutando onUserAuthenticated');
                     await this.onUserAuthenticated(e.detail.user);
                 } else {
+                    console.log('Ningún usuario, mostrando modal de auth');
                     this.currentUser = null;
                     this.showAuthModal();
                 }
@@ -55,6 +60,10 @@ const app = {
                 this.currentUser = user;
                 await this.onUserAuthenticated(user);
             } else {
+                // Asegurarse de que el splash se oculta antes de mostrar el modal de auth
+                if (typeof hideSplashScreen === 'function') {
+                    hideSplashScreen();
+                }
                 this.showAuthModal();
             }
 
@@ -135,14 +144,28 @@ const app = {
         const appContent = document.getElementById('app-content');
         const authModal = document.getElementById('auth-modal');
 
+        console.log('updateUIForAuthState - currentUser:', this.currentUser, 'appContent:', appContent, 'authModal:', authModal);
+
         if (this.currentUser) {
             // Usuario autenticado
-            if (appContent) appContent.classList.remove('hidden');
-            if (authModal) authModal.classList.add('hidden');
+            if (appContent) {
+                appContent.classList.remove('hidden');
+                console.log('Mostrando app-content, hidden removido');
+            }
+            if (authModal) {
+                authModal.classList.add('hidden');
+                console.log('Ocultando auth-modal, hidden añadido');
+            }
         } else {
             // No autenticado
-            if (appContent) appContent.classList.add('hidden');
-            if (authModal) authModal.classList.remove('hidden');
+            if (appContent) {
+                appContent.classList.add('hidden');
+                console.log('Ocultando app-content, hidden añadido');
+            }
+            if (authModal) {
+                authModal.classList.remove('hidden');
+                console.log('Mostrando auth-modal, hidden removido');
+            }
         }
     },
 
@@ -864,11 +887,16 @@ const app = {
         // Reiniciar cliente de Supabase
         this.supabase = supabase.createClient(url, anonKey);
 
+        // También actualizar auth
+        if (typeof auth !== 'undefined' && auth.initSupabase) {
+            await auth.initSupabase();
+        }
+
         // Cerrar modal
         this.closeSupabaseConfigModal();
 
-        // Verificar si hay usuario autenticado
-        const { data: { user } } = await this.supabase.auth.getUser();
+        // Verificar si hay usuario autenticado (usar auth.getUser() en lugar del nativo)
+        const user = auth.getUser();
         if (user) {
             this.currentUser = user;
             await this.onUserAuthenticated(user);
