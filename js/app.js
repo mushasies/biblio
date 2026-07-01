@@ -16,8 +16,32 @@ const app = {
 
     async init() {
         try {
+            // Escuchar evento para mostrar modal de configuración de Supabase
+            document.addEventListener('showSupabaseConfig', () => {
+                this.showSupabaseConfigModal();
+            });
+            
+            // Escuchar eventos de cambio de autenticación desde auth.js
+            document.addEventListener('authChange', async (e) => {
+                if (e.detail && e.detail.user) {
+                    this.currentUser = e.detail.user;
+                    await this.onUserAuthenticated(e.detail.user);
+                } else {
+                    this.currentUser = null;
+                    this.showAuthModal();
+                }
+            });
+            
             // Inicializar Supabase
             await this.initSupabase();
+            
+            // Inicializar auth (esto también inicializa el cliente de Supabase en auth.js)
+            await auth.init();
+            
+            // Usar el cliente de auth si está disponible
+            if (auth.getClient()) {
+                this.supabase = auth.getClient();
+            }
 
             // Escuchar cambios de autenticacion
             this.setupAuthListeners();
@@ -25,8 +49,8 @@ const app = {
             // Cargar configuracion guardada
             await this.loadConfig();
 
-            // Verificar si hay usuario autenticado
-            const { data: { user } } = await this.supabase.auth.getUser();
+            // Verificar si hay usuario autenticado (usando el sistema de auth personalizado)
+            const user = auth.getUser();
             if (user) {
                 this.currentUser = user;
                 await this.onUserAuthenticated(user);
@@ -46,7 +70,7 @@ const app = {
             this.supabase = supabase.createClient(config.url, config.anonKey);
         } else {
             this.showSupabaseConfigModal();
-            // Esperar a que se configure
+            // Esperar a que se configure (con timeout de seguridad)
             await new Promise((resolve) => {
                 const interval = setInterval(() => {
                     if (this.supabase) {
@@ -54,6 +78,11 @@ const app = {
                         resolve();
                     }
                 }, 100);
+                // Timeout de 30 segundos por si el usuario no configura
+                setTimeout(() => {
+                    clearInterval(interval);
+                    resolve();
+                }, 30000);
             });
         }
     },
