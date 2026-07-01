@@ -1,115 +1,301 @@
-const api = {
-  // Limpiar caracteres no numéricos del ISBN (como guiones o espacios)
-  cleanISBN(isbn) {
-    if (!isbn) return '';
-    return isbn.replace(/[^0-9X]/gi, '');
-  },
+// =============================================
+// FUNCIONES DE SUPABASE (API)
+// =============================================
 
-  // Método unificado para buscar libro por ISBN en múltiples APIs
-  async lookupBook(isbn) {
-    const cleaned = this.cleanISBN(isbn);
-    if (!cleaned) {
-      throw new Error('El ISBN provisto no es válido.'); 
-    }
+// Inicializar cliente de Supabase
+function initSupabaseClient(url, anonKey) {
+    return supabase.createClient(url, anonKey);
+}
 
-    console.log(`Buscando ISBN: ${cleaned} en APIs externas...`);
-    let bookData = null;
+// =============================================
+// BIBLIOTECAS
+// =============================================
 
-    // 1. Intentar primero con Google Books (suele ser la más completa en español)
-    try {
-      bookData = await this.fetchFromGoogleBooks(cleaned);
-    } catch (err) {
-      console.warn('Error consultando Google Books:', err);
-    }
+async function crearBiblioteca(nombre, descripcion = '') {
+    const userId = app.currentUser?.id;
+    if (!userId) return { data: null, error: new Error('Usuario no autenticado') };
 
-    // 2. Si no se encuentra o faltan datos clave, intentar con Open Library
-    if (!bookData || !bookData.titulo) {
-      try {
-        const olData = await this.fetchFromOpenLibrary(cleaned);
-        if (olData && olData.titulo) {
-          // Fusionar o usar la info de Open Library
-          bookData = { ...bookData, ...olData };
+    const { data, error } = await app.supabase
+        .from('bibliotecas')
+        .insert({
+            user_id: userId,
+            nombre: nombre,
+            descripcion: descripcion
+        })
+        .select()
+        .single();
+
+    return { data, error };
+}
+
+async function obtenerBibliotecas() {
+    const userId = app.currentUser?.id;
+    if (!userId) return { data: [], error: null };
+
+    const { data, error } = await app.supabase
+        .from('bibliotecas')
+        .select('*')
+        .eq('user_id', userId)
+        .order('nombre', { ascending: true });
+
+    return { data: data || [], error };
+}
+
+async function eliminarBiblioteca(bibliotecaId) {
+    const userId = app.currentUser?.id;
+    if (!userId) return { error: new Error('Usuario no autenticado') };
+
+    const { error } = await app.supabase
+        .from('bibliotecas')
+        .delete()
+        .eq('id', bibliotecaId)
+        .eq('user_id', userId);
+
+    return { error };
+}
+
+// =============================================
+// LIBROS
+// =============================================
+
+async function obtenerLibros(bibliotecaId = null) {
+    const userId = app.currentUser?.id;
+    if (!userId) return { data: [], error: null };
+
+    let query = app.supabase
+        .from('libros')
+        .select('*, bibliotecas(nombre, id)');
+
+    if (bibliotecaId) {
+        // Verificar que la biblioteca pertenece al usuario
+        const { data: bib } = await app.supabase
+            .from('bibliotecas')
+            .select('id')
+            .eq('id', bibliotecaId)
+            .eq('user_id', userId)
+            .single();
+
+        if (bib) {
+            query = query.eq('biblioteca_id', bibliotecaId);
+        } else {
+            return { data: [], error: null };
         }
-      } catch (err) {
-        console.warn('Error consultando Open Library:', err);
-      }
+    } else {
+        // Obtener todas las bibliotecas del usuario
+        const { data: bibliotecas } = await obtenerBibliotecas();
+        if (bibliotecas.length === 0) {
+            return { data: [], error: null };
+        }
+        const bibliotecaIds = bibliotecas.map(b => b.id);
+        query = query.in('biblioteca_id', bibliotecaIds);
     }
 
-    if (!bookData || !bookData.titulo) {
-      throw new Error('No se encontró información para este ISBN en las APIs públicas.');
+    const { data, error } = await query.order('fecha_registro', { ascending: false });
+    return { data: data || [], error };
+}
+
+async function guardarLibro(libroData) {
+    const userId = app.currentUser?.id;
+    if (!userId) return { data: null, error: new Error('Usuario no autenticado') };
+
+    // Asegurar que el libro pertenece a una biblioteca del usuario
+    if (libroData.biblioteca_id) {
+        const { data: bib } = await app.supabase
+            .from('bibliotecas')
+            .select('id')
+            .eq('id', libroData.biblioteca_id)
+            .eq('user_id', userId)
+            .single();
+
+        if (!bib) {
+            return { data: null, error: new Error('Biblioteca no valida') };
+        }
+    } else {
+        // Asignar la biblioteca actual
+        libroData.biblioteca_id = app.currentBibliotecaId;
     }
 
-    return bookData;
-  },
-
-  // Consultar la API de Google Books
-  async fetchFromGoogleBooks(isbn) {
-    // Intentamos primero una búsqueda estricta por ISBN
-    let url = `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`;
-    let response = await fetch(url);
-    if (!response.ok) throw new Error('Google Books API respondió con un error');
-    
-    let data = await response.json();
-    
-    // Si no hay resultados estrictos, intentamos una búsqueda general por el número
-    if (!data.items || data.items.length === 0) {
-      url = `https://www.googleapis.com/books/v1/volumes?q=${isbn}`;
-      response = await fetch(url);
-      if (response.ok) {
-        data = await response.json();
-      }
+    // Convertir autores de string a array
+    if (libroData.autores && typeof libroData.autores === 'string') {
+        libroData.autores = libroData.autores.split(',').map(a => a.trim()).filter(a => a);
     }
 
-    if (!data.items || data.items.length === 0) return null;
+    // Convertir precios a numero
+    libroData.precio_compra = parseFloat(libroData.precio_compra) || 0;
+    libroData.precio_venta_estimado = parseFloat(libroData.precio_venta_estimado) || 0;
 
-    const info = data.items[0].volumeInfo;
-    
-    // Normalizar datos de portada (Google Books provee enlaces HTTP, los convertimos a HTTPS si es necesario)
-    let portadaUrl = '';
-    if (info.imageLinks) {
-      portadaUrl = info.imageLinks.thumbnail || info.imageLinks.smallThumbnail || '';
-      if (portadaUrl && portadaUrl.startsWith('http:')) {
-        portadaUrl = portadaUrl.replace('http:', 'https:');
-      }
+    const { data, error } = await app.supabase
+        .from('libros')
+        .upsert(libroData)
+        .select()
+        .single();
+
+    return { data, error };
+}
+
+async function eliminarLibro(libroId) {
+    const userId = app.currentUser?.id;
+    if (!userId) return { error: new Error('Usuario no autenticado') };
+
+    // Verificar que el libro pertenece al usuario
+    const { data: libro } = await app.supabase
+        .from('libros')
+        .select('biblioteca_id, bibliotecas(user_id)')
+        .eq('id', libroId)
+        .single();
+
+    if (!libro || libro.bibliotecas.user_id !== userId) {
+        return { error: new Error('Libro no encontrado o no autorizado') };
     }
 
-    return {
-      titulo: info.title || '',
-      autor: info.authors ? info.authors.join(', ') : '',
-      editorial: info.publisher || '',
-      anio: info.publishedDate ? info.publishedDate.substring(0, 4) : '',
-      descripcion: info.description || '',
-      portadaUrl: portadaUrl,
-      isbn: isbn
-    };
-  },
+    const { error } = await app.supabase
+        .from('libros')
+        .delete()
+        .eq('id', libroId);
 
-  // Consultar la API de Open Library
-  async fetchFromOpenLibrary(isbn) {
-    const url = `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Open Library API respondió con un error');
+    return { error };
+}
 
-    const data = await response.json();
-    const key = `ISBN:${isbn}`;
-    if (!data[key]) return null;
+async function buscarLibroPorISBN(isbn) {
+    const { data, error } = await app.supabase
+        .from('libros')
+        .select('*')
+        .eq('isbn', isbn)
+        .single();
 
-    const info = data[key];
+    return { data, error };
+}
 
-    // Obtener la mejor resolución de portada de Open Library
-    let portadaUrl = '';
-    if (info.cover) {
-      portadaUrl = info.cover.large || info.cover.medium || info.cover.small || '';
+// =============================================
+// FOTOS DE LIBROS
+// =============================================
+
+async function subirFotosLibro(libroId, files) {
+    const userId = app.currentUser?.id;
+    if (!userId) return { urls: [], error: new Error('Usuario no autenticado') };
+
+    // Verificar que el libro pertenece al usuario
+    const { data: libro } = await app.supabase
+        .from('libros')
+        .select('biblioteca_id, bibliotecas(user_id)')
+        .eq('id', libroId)
+        .single();
+
+    if (!libro || libro.bibliotecas.user_id !== userId) {
+        return { urls: [], error: new Error('Libro no encontrado o no autorizado') };
     }
 
-    return {
-      titulo: info.title || '',
-      autor: info.authors ? info.authors.map(a => a.name).join(', ') : '',
-      editorial: info.publishers ? info.publishers.map(p => p.name).join(', ') : '',
-      anio: info.publish_date ? info.publish_date.match(/\d{4}/)?.[0] || '' : '',
-      descripcion: (typeof info.notes === 'string') ? info.notes : '',
-      portadaUrl: portadaUrl,
-      isbn: isbn
-    };
-  }
-};
+    const urls = [];
+
+    for (const file of files) {
+        const fileName = `libro_${libroId}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${file.name.split('.').pop()}`;
+
+        const { data: uploadData, error: uploadError } = await app.supabase.storage
+            .from('fotos-libros')
+            .upload(fileName, file);
+
+        if (uploadError) {
+            console.error('Error al subir foto:', uploadError);
+            continue;
+        }
+
+        const { data: urlData } = app.supabase.storage
+            .from('fotos-libros')
+            .getPublicUrl(fileName);
+
+        if (urlData.publicUrl) {
+            urls.push(urlData.publicUrl);
+        }
+    }
+
+    return { urls, error: null };
+}
+
+async function guardarFotosLibro(libroId, urls) {
+    if (!urls || urls.length === 0) return { error: null };
+
+    // Eliminar fotos existentes (opcional)
+    const { error: deleteError } = await app.supabase
+        .from('fotos_libros')
+        .delete()
+        .eq('libro_id', libroId);
+
+    if (deleteError) {
+        console.error('Error al eliminar fotos existentes:', deleteError);
+    }
+
+    // Insertar nuevas fotos
+    const fotosData = urls.map((url, index) => ({
+        libro_id: libroId,
+        url: url,
+        orden: index
+    }));
+
+    const { error } = await app.supabase
+        .from('fotos_libros')
+        .insert(fotosData);
+
+    return { error };
+}
+
+async function obtenerFotosLibro(libroId) {
+    const { data, error } = await app.supabase
+        .from('fotos_libros')
+        .select('*')
+        .eq('libro_id', libroId)
+        .order('orden', { ascending: true });
+
+    return { data: data || [], error };
+}
+
+// =============================================
+// PERFILES
+// =============================================
+
+async function obtenerPerfil() {
+    const userId = app.currentUser?.id;
+    if (!userId) return { data: null, error: null };
+
+    const { data, error } = await app.supabase
+        .from('perfiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+    return { data, error };
+}
+
+async function actualizarPerfil(perfilData) {
+    const userId = app.currentUser?.id;
+    if (!userId) return { data: null, error: new Error('Usuario no autenticado') };
+
+    const { data, error } = await app.supabase
+        .from('perfiles')
+        .upsert({ ...perfilData, id: userId })
+        .select()
+        .single();
+
+    return { data, error };
+}
+
+// =============================================
+// ESTADISTICAS
+// =============================================
+
+async function obtenerEstadisticas(bibliotecaId = null) {
+    const userId = app.currentUser?.id;
+    if (!userId) return { data: null, error: null };
+
+    let query = app.supabase
+        .from('estadisticas_usuario')
+        .select('*');
+
+    if (bibliotecaId) {
+        query = query.eq('biblioteca_id', bibliotecaId);
+    }
+
+    query = query.eq('user_id', userId);
+
+    const { data, error } = await query;
+    return { data: data?.[0] || null, error };
+}

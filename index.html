@@ -25,7 +25,7 @@ primary: {
 }
 </script>  
 
-<!-- Supabase - Carga y verificación -->
+<!-- Supabase - Carga y verificacion -->
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
   // Verificar que Supabase se cargó correctamente y disparar evento
@@ -66,7 +66,7 @@ primary: {
 <!-- Lucide Icons (para iconos bonitos y sencillos) -->
 <script src="https://unpkg.com/lucide@latest"></script>
 
-<!-- Html5-Qrcode (Lector de códigos de barras) -->
+<!-- Html5-Qrcode (Lector de codigos de barras) -->
 <script src="https://unpkg.com/html5-qrcode"></script>
 
 
@@ -112,9 +112,9 @@ display: block;
 </div>
 </div>
 
-<!-- Contenido principal de la aplicación (oculto hasta autenticación) -->
+<!-- Contenido principal de la aplicacion (oculto hasta autenticacion) -->
 <div id="app-content" class="h-full flex flex-col hidden">
-<!-- Header / Navbar superior (Desktop & Móvil) -->
+<!-- Header / Navbar superior (Desktop & Movil) -->
 <header class="bg-primary-600 text-white shadow-md z-10 shrink-0">
 <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
 <div class="flex items-center space-x-3">
@@ -127,7 +127,7 @@ display: block;
 </div>
 </div>
 
-<!-- Estadísticas rápidas en Desktop -->
+<!-- Estadisticas rapidas en Desktop -->
 <div class="hidden md:flex items-center space-x-6 text-sm">
 <div class="text-right">
 <span class="block text-primary-200 text-xs">Total Libros</span>
@@ -143,7 +143,7 @@ display: block;
 </div>
 </div>
 
-<!-- Botón para añadir libro rápido en header (móvil/desktop) -->
+<!-- Boton para anadir libro rapido en header (movil/desktop) -->
 <button onclick="app.showAddBookModal()" class="bg-white text-primary-600 hover:bg-primary-50 px-3 py-2 rounded-lg font-medium text-sm flex items-center space-x-1.5 shadow transition active:scale-95">
 <i data-lucide="plus-circle" class="w-4 h-4"></i>
 <span>Añadir</span>
@@ -155,14 +155,14 @@ display: block;
 <main class="flex-1 overflow-y-auto custom-scrollbar pb-16 md:pb-6">
 <div class="max-w-6xl mx-auto p-4 space-y-6">
 
-<!-- SECCIÓN 1: DASHBOARD / ESTADÍSTICAS EN MÓVIL -->
+<!-- SECCION 1: DASHBOARD / ESTADISTICAS EN MOVIL -->
 <section class="grid grid-cols-3 gap-3 md:hidden">
 <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 text-center">
 <span class="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">Libros</span>
 <span id="stats-total-mobile" class="text-xl font-extrabold text-primary-600">0</span>
 </div>
 <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 text-center">
-<span class="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">Inversión</span>
+<span class="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">Inversion</span>
 <span id="stats-compra-mobile" class="text-sm font-extrabold text-slate-700">0.00€</span>
 </div>
 <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 text-center">
@@ -171,17 +171,23 @@ display: block;
 </div>
 </section>
 
-<!-- SECCIÓN 2: BUSCADOR Y FILTROS -->
+<!-- SECCION 2: BUSCADOR Y FILTROS -->
 <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 space-y-3">
 <div class="flex flex-col sm:flex-row gap-3">
 <div class="relative flex-1">
 <i data-lucide="search" class="absolute left-3 top-2.5 text-slate-400 w-5 h-5"></i>
 <input type="text" id="search-input" placeholder="Buscar por título, autor, editorial o ISBN..." class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 transition">
 </div>
+<!-- Selector de biblioteca -->
+<div id="biblioteca-select-container" class="hidden">
+    <select id="biblioteca-select" onchange="app.cambiarBiblioteca(this.value)"
+            class="bg-slate-50 border border-slate-200 text-slate-600 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+    </select>
+</div>
 <div class="flex gap-2">
 <select id="sort-select" class="bg-slate-50 border border-slate-200 text-slate-600 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 transition">
 <option value="fechaRegistroDesc">Agregados recientes</option>
-<option value="tituloAsc">Título (A-Z)</option>
+<option value="tituloAsc">Titulo (A-Z)</option>
 <option value="autorAsc">Autor (A-Z)</option>
 <option value="precioCompraDesc">Mayor precio compra</option>
 </select>
@@ -189,39 +195,39 @@ display: block;
 </div>
 </section>
 
-<!-- SECCIÓN 3: LISTADO DE LIBROS -->
+<!-- SECCION 3: LISTADO DE LIBROS -->
 <section>
 <div class="flex items-center justify-between mb-3">
 <h2 class="text-md font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
 <i data-lucide="library" class="w-4 h-4"></i>
-Mi Colección (<span id="books-count">0</span>)
+Mi Coleccion (<span id="books-count">0</span>)
 </h2>
 </div>
 
-<!-- Estado vacío -->
+<!-- Estado vacio -->
 <div id="empty-state" class="bg-white rounded-xl shadow-sm border border-dashed border-slate-200 p-12 text-center space-y-4">
 <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-50 text-primary-500">
 <i data-lucide="book-open" class="w-8 h-8"></i>
 </div>
 <div class="max-w-sm mx-auto space-y-1">
-<h3 class="font-bold text-slate-700 text-lg">Tu biblioteca está vacía</h3>
-<p class="text-slate-500 text-sm">Escanea el código de barras de un libro o añádelo manualmente para empezar tu catálogo.</p>
+<h3 class="font-bold text-slate-700 text-lg">Tu biblioteca esta vacia</h3>
+<p class="text-slate-500 text-sm">Escanea el codigo de barras de un libro o anadelo manualmente para empezar tu catalogo.</p>
 </div>
 <button onclick="app.showAddBookModal()" class="bg-primary-600 hover:bg-primary-700 text-white font-medium px-4 py-2 rounded-lg text-sm inline-flex items-center gap-2 shadow transition active:scale-95">
 <i data-lucide="plus" class="w-4 h-4"></i>
-<span>Añadir mi primer libro</span>
+<span>Anadir mi primer libro</span>
 </button>
 </div>
 
 <!-- Grid de Libros -->
 <div id="books-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 hidden">
-<!-- Se rellena dinámicamente -->
+<!-- Se rellena dinamicamente -->
 </div>
 </section>
 </div>
 </main>
 
-<!-- Barra de navegación inferior móvil para acceso rápido -->
+<!-- Barra de navegacion inferior movil para acceso rapido -->
 <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 py-2 px-6 flex justify-around items-center shadow-lg z-10 shrink-0">
 <button onclick="app.scrollToTop()" class="flex flex-col items-center text-primary-600">
 <i data-lucide="home" class="w-6 h-6"></i>
@@ -239,7 +245,7 @@ Mi Colección (<span id="books-count">0</span>)
 </button>
 </nav>
 
-<!-- MODAL: AÑADIR LIBRO (ESCANEAR / FORMULARIO) -->
+<!-- MODAL: AÑADIR LIBRO (ESCANEAR / FORMULARIO) -->
 <div id="add-book-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
 <div class="bg-white w-full max-w-lg rounded-2xl shadow-xl flex flex-col max-h-[90vh] overflow-hidden">
 <!-- Modal Header -->
@@ -253,7 +259,7 @@ Mi Colección (<span id="books-count">0</span>)
 </button>
 </div>
 
-<!-- Tabs de Navegación del Modal -->
+<!-- Tabs de Navegacion del Modal -->
 <div class="flex border-b border-slate-100 bg-slate-50 shrink-0">
 <button id="tab-btn-scan" onclick="app.switchModalTab('scan')" class="flex-1 py-3 text-sm font-semibold border-b-2 border-primary-500 text-primary-600 flex items-center justify-center gap-2">
 <i data-lucide="camera" class="w-4 h-4"></i>
@@ -271,13 +277,13 @@ Formulario Manual
 <!-- TAB 1: ESCANEAR -->
 <div id="tab-content-scan" class="tab-content active space-y-4">
 <div class="bg-slate-900 rounded-xl overflow-hidden relative aspect-video flex items-center justify-center border border-slate-800 shadow-inner">
-<!-- El lector de cámara se renderizará aquí -->
+<!-- El lector de camara se renderizara aqui -->
 <div id="interactive-reader" class="w-full h-full"></div>
 <div id="reader-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 p-4 text-center space-y-3 bg-slate-950">
 <i data-lucide="scan-barcode" class="w-12 h-12 text-slate-500 animate-pulse"></i>
-<p class="text-xs">Usa la cámara trasera para escanear el código de barras (ISBN) del libro.</p>
+<p class="text-xs">Usa la camara trasera para escanear el codigo de barras (ISBN) del libro.</p>
 <button onclick="scanner.startScanner()" class="bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow transition active:scale-95">
-Activar Cámara
+Activar Camara
 </button>
 </div>
 </div>
@@ -292,12 +298,12 @@ Activar Cámara
 <span>Buscar</span>
 </button>
 </div>
-<p class="text-[11px] text-slate-400">Buscaremos de forma automática en Google Books y Open Library.</p>
+<p class="text-[11px] text-slate-400">Buscaremos de forma automatica en Google Books y Open Library.</p>
 </div>
 
-<!-- Subir imagen con código de barras de la galería -->
+<!-- Subir imagen con codigo de barras de la galeria -->
 <div class="border-t border-slate-100 pt-4 flex flex-col items-center">
-<span class="text-xs text-slate-400 mb-2">¿Tienes una foto del código de barras?</span>
+<span class="text-xs text-slate-400 mb-2">¿Tienes una foto del codigo de barras?</span>
 <label class="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-1.5 transition">
 <i data-lucide="image" class="w-4 h-4"></i>
 <span>Escanear desde foto</span>
@@ -309,15 +315,16 @@ Activar Cámara
 <!-- TAB 2: FORMULARIO MANUAL -->
 <div id="tab-content-manual" class="tab-content space-y-4">
 <form id="book-form" onsubmit="app.saveBook(event)" class="space-y-4">
-<!-- ID oculto para edición -->
+<!-- ID oculto para edicion -->
 <input type="hidden" id="form-book-id">
+<input type="hidden" id="form-biblioteca-id">
 
-<!-- Datos básicos autocompletados -->
+<!-- Datos basicos autocompletados -->
 <div class="space-y-3">
 <h4 class="text-xs font-bold text-primary-600 uppercase tracking-wider border-b border-slate-100 pb-1">Datos del Libro</h4>
 
 <div>
-<label class="block text-xs font-bold text-slate-500 mb-1">Título *</label>
+<label class="block text-xs font-bold text-slate-500 mb-1">Titulo *</label>
 <input type="text" id="form-titulo" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
 </div>
 
@@ -338,13 +345,13 @@ Activar Cámara
 <input type="text" id="form-editorial" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
 </div>
 <div>
-<label class="block text-xs font-bold text-slate-500 mb-1">Año de Pub.</label>
+<label class="block text-xs font-bold text-slate-500 mb-1">Anio de Pub.</label>
 <input type="text" id="form-anio" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
 </div>
 </div>
 
 <div>
-<label class="block text-xs font-bold text-slate-500 mb-1">Sinopsis / Descripción</label>
+<label class="block text-xs font-bold text-slate-500 mb-1">Sinopsis / Descripcion</label>
 <textarea id="form-descripcion" rows="3" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 custom-scrollbar"></textarea>
 </div>
 
@@ -447,23 +454,23 @@ Guardar Libro
 <!-- Columna Derecha: Detalles, Campos Propios y Sinopsis -->
 <div class="w-full md:w-2/3 space-y-4">
 <div>
-<h2 id="detail-titulo" class="text-2xl font-extrabold text-slate-800 leading-tight">Título del Libro</h2>
+<h2 id="detail-titulo" class="text-2xl font-extrabold text-slate-800 leading-tight">Titulo del Libro</h2>
 <p id="detail-autor" class="text-md text-primary-600 font-semibold mt-1">Autor del Libro</p>
 </div>
 
-<!-- Tabla de especificaciones básicas -->
+<!-- Tabla de especificaciones basicas -->
 <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-t border-b border-slate-100 py-3">
 <div>
 <span class="text-slate-400 text-xs block font-semibold uppercase">Editorial</span>
 <span id="detail-editorial" class="text-slate-700">-</span>
 </div>
 <div>
-<span class="text-slate-400 text-xs block font-semibold uppercase">Año de Pub.</span>
+<span class="text-slate-400 text-xs block font-semibold uppercase">Anio de Pub.</span>
 <span id="detail-anio" class="text-slate-700">-</span>
 </div>
 </div>
 
-<!-- Sección de campos personalizados -->
+<!-- Seccion de campos personalizados -->
 <div class="bg-primary-50/50 rounded-xl p-4 border border-primary-100/50 grid grid-cols-3 gap-3">
 <div class="text-center">
 <span class="text-slate-400 text-[10px] block font-bold uppercase tracking-wider">Precio Compra</span>
@@ -482,26 +489,26 @@ Guardar Libro
 <!-- Sinopsis -->
 <div class="space-y-1">
 <span class="text-slate-400 text-xs block font-semibold uppercase">Sinopsis</span>
-<p id="detail-descripcion" class="text-slate-600 text-sm leading-relaxed whitespace-pre-line">No hay descripción disponible para este libro.</p>
+<p id="detail-descripcion" class="text-slate-600 text-sm leading-relaxed whitespace-pre-line">No hay descripcion disponible para este libro.</p>
 </div>
 </div>
 </div>
 
-<!-- Sección: Fotos reales del libro -->
+<!-- Seccion: Fotos reales del libro -->
 <div id="detail-real-photos-section" class="border-t border-slate-100 pt-6 space-y-3 hidden">
 <h4 class="text-sm font-bold text-slate-700 flex items-center gap-1.5">
 <i data-lucide="images" class="w-4 h-4 text-primary-500"></i>
-<span>Fotos reales del libro físico</span>
+<span>Fotos reales del libro fisico</span>
 </h4>
 <div id="detail-real-photos-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-3">
-<!-- Fotos del libro físico -->
+<!-- Fotos del libro fisico -->
 </div>
 </div>
 </div>
 </div>
 </div>
 
-<!-- MODAL: CONFIGURACIÓN DE SUPABASE -->
+<!-- MODAL: CONFIGURACION DE SUPABASE -->
 <div id="supabase-config-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
 <div class="bg-white w-full max-w-md rounded-2xl shadow-xl flex flex-col">
 <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
@@ -515,7 +522,7 @@ Guardar Libro
 </div>
 <div class="p-6 space-y-4">
 <p class="text-sm text-slate-600">
-Para habilitar la sincronización en la nube, introduce las credenciales de tu proyecto Supabase:
+Para habilitar la sincronizacion en la nube, introduce las credenciales de tu proyecto Supabase:
 <br><strong class="text-primary-600">La SERVICE KEY es obligatoria para registrar usuarios.</strong>
 </p>
 <form id="supabase-config-form" class="space-y-4">
@@ -525,7 +532,7 @@ Para habilitar la sincronización en la nube, introduce las credenciales de tu p
 class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
 </div>
 <div>
-<label class="block text-xs font-bold text-slate-500 mb-1">Clave Anónima (anon key) <span class="text-slate-400">(solo lectura)</span></label>
+<label class="block text-xs font-bold text-slate-500 mb-1">Clave Anonima (anon key) <span class="text-slate-400">(solo lectura)</span></label>
 <input type="password" id="supabase-anon-key-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." 
 class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
 </div>
@@ -533,7 +540,7 @@ class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline
 <label class="block text-xs font-bold text-slate-500 mb-1">Clave de Servicio (service key) <span class="text-red-500">*</span></label>
 <input type="password" id="supabase-service-key-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." 
 class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-<p class="text-[10px] text-slate-400 mt-1">⚠️ Obligatoria para registrar usuarios. NO la expongas en producción.</p>
+<p class="text-[10px] text-slate-400 mt-1">⚠️ Obligatoria para registrar usuarios. NO la expongas en produccion.</p>
 </div>
 <div class="flex gap-3 pt-2">
 <button type="button" onclick="app.closeSupabaseConfigModal()" 
@@ -542,7 +549,7 @@ Cancelar
 </button>
 <button type="submit" 
 class="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg text-sm shadow transition active:scale-95">
-Guardar Configuración
+Guardar Configuracion
 </button>
 </div>
 </form>
@@ -550,11 +557,11 @@ Guardar Configuración
 </div>
 </div>
 
-<!-- MODAL: AUTENTICACIÓN (Login/Registro) -->
+<!-- MODAL: AUTENTICACION (Login/Registro) -->
 <div id="auth-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
 <div class="bg-white w-full max-w-md rounded-2xl shadow-xl flex flex-col">
 <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
-<h3 class="font-bold text-slate-800 text-lg">Iniciar Sesión</h3>
+<h3 class="font-bold text-slate-800 text-lg">Iniciar Sesion</h3>
 <button onclick="app.closeAuthModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 transition">
 <i data-lucide="x" class="w-5 h-5"></i>
 </button>
@@ -587,7 +594,7 @@ class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline
 <div class="flex gap-3 pt-2">
 <button type="submit" 
 class="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg text-sm shadow transition active:scale-95">
-Iniciar Sesión
+Iniciar Sesion
 </button>
 </div>
 </form>
@@ -629,7 +636,7 @@ Registrarse
 <script src="js/app.js"></script>
 
 <script>
-// Mostrar el cuerpo de la app una vez que todo esté listo
+// Mostrar el cuerpo de la app una vez que todo este listo
 function showAppBody() {
   const body = document.querySelector('body');
   if (body) {
@@ -638,7 +645,7 @@ function showAppBody() {
   }
 }
 
-// Ocultar splash screen y mostrar la app una vez que todo esté cargado
+// Ocultar splash screen y mostrar la app una vez que todo este cargado
 function hideSplashScreen() {
   const splash = document.getElementById("loading-splash");
   if (splash) {
@@ -646,18 +653,18 @@ function hideSplashScreen() {
     setTimeout(() => {
       splash.classList.add("hidden");
       showAppBody();
-    }, 500); // Coincide con la duración de la transición
+    }, 500); // Coincide con la duracion de la transicion
   }
 }
 
-// Refrescar iconos Lucide al cargar la página
+// Refrescar iconos Lucide al cargar la pagina
 function refreshLucide() {
   if (window.lucide) {
     window.lucide.createIcons();
   }
 }
 
-// Inicializar la aplicación
+// Inicializar la aplicacion
 async function initApp() {
   const splash = document.getElementById("loading-splash");
   if (splash) {
@@ -665,15 +672,15 @@ async function initApp() {
   }
   
   try {
-    // Esperar a que app esté disponible (los scripts se cargaron de forma normal en el body)
+    // Esperar a que app este disponible (los scripts se cargaron de forma normal en el body)
     if (typeof app === 'undefined' || typeof app.init !== 'function') {
-      // Si app no está disponible, esperar un poco
+      // Si app no esta disponible, esperar un poco
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     
     // Verificar nuevamente
     if (typeof app === 'undefined' || typeof app.init !== 'function') {
-      console.error('El módulo app no está disponible.');
+      console.error('El modulo app no esta disponible.');
       hideSplashScreen();
       return;
     }
@@ -686,8 +693,8 @@ async function initApp() {
   }
 }
 
-// Esperar a que el DOM esté listo y luego inicializar la app
-// Los scripts ya se cargaron de forma estática en el body
+// Esperar a que el DOM este listo y luego inicializar la app
+// Los scripts ya se cargaron de forma estatica en el body
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', function() {
     // Dar un tiempo para que los scripts se ejecuten

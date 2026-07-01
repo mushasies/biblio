@@ -1,832 +1,534 @@
+// =============================================
+// APP - LOGICA PRINCIPAL
+// =============================================
+
 const app = {
-    books: [],
-    currentPhotos: [],
-    isAuthenticated: false,
-    user: null,
-    userProfile: null,
+    supabase: null,
+    currentUser: null,
+    libros: [],
+    bibliotecas: [],
+    currentBibliotecaId: null,
+    isAdmin: false,
 
-    // Inicializar la aplicacion
+    // =============================================
+    // INICIALIZACION
+    // =============================================
+
     async init() {
-        console.log('Iniciando Biblio App...');
+        try {
+            // Inicializar Supabase
+            await this.initSupabase();
 
-        // 1. Inicializar Supabase Auth
-        await auth.init();
+            // Escuchar cambios de autenticacion
+            this.setupAuthListeners();
 
-        // 2. Configurar eventos de busqueda y filtros
-        document.getElementById('search-input')?.addEventListener('input', () => this.filterAndRenderBooks());
-        document.getElementById('sort-select')?.addEventListener('change', () => this.filterAndRenderBooks());
+            // Cargar configuracion guardada
+            await this.loadConfig();
 
-        // 3. Inicializar iconos
-        this.refreshIcons();
+            // Verificar si hay usuario autenticado
+            const { data: { user } } = await this.supabase.auth.getUser();
+            if (user) {
+                this.currentUser = user;
+                await this.onUserAuthenticated(user);
+            } else {
+                this.showAuthModal();
+            }
 
-        // 4. Configurar manejadores de formularios
-        document.getElementById("login-form")?.addEventListener("submit", (e) => this.handleLogin(e));
-        document.getElementById("signup-form")?.addEventListener("submit", (e) => this.handleSignup(e));
-        document.getElementById("supabase-config-form")?.addEventListener("submit", (e) => this.handleSupabaseConfig(e));
-
-        // 5. Inicializar storage con el cliente de auth
-        storage.init(auth.getClient());
-
-        // 6. Verificar autenticacion
-        this.handleAuthChange(auth.getUser(), auth.getProfile());
-
-        // 7. Registrar Service Worker
-        this.registerServiceWorker();
+        } catch (error) {
+            console.error('Error al inicializar la app:', error);
+            alert('Error al inicializar la aplicacion: ' + error.message);
+        }
     },
 
-    // Registrar Service Worker
-    registerServiceWorker() {
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then((reg) => console.log('Service Worker registrado.', reg.scope))
-                    .catch((err) => console.warn('Error al registrar Service Worker:', err));
+    async initSupabase() {
+        const config = this.loadSupabaseConfig();
+        if (config.url && config.anonKey) {
+            this.supabase = supabase.createClient(config.url, config.anonKey);
+        } else {
+            this.showSupabaseConfigModal();
+            // Esperar a que se configure
+            await new Promise((resolve) => {
+                const interval = setInterval(() => {
+                    if (this.supabase) {
+                        clearInterval(interval);
+                        resolve();
+                    }
+                }, 100);
             });
         }
     },
 
-    // Actualizar iconos
-    refreshIcons() {
-        if (window.lucide) {
-            window.lucide.createIcons();
-        }
+    loadSupabaseConfig() {
+        const url = localStorage.getItem('supabaseUrl');
+        const anonKey = localStorage.getItem('supabaseAnonKey');
+        return { url, anonKey };
     },
 
-    // Manejar cambios en autenticacion
-    async handleAuthChange(user, profile) {
-        this.user = user;
-        this.userProfile = profile;
-        this.isAuthenticated = !!user;
+    setupAuthListeners() {
+        this.supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN') {
+                this.currentUser = session.user;
+                this.onUserAuthenticated(session.user);
+            } else if (event === 'SIGNED_OUT') {
+                this.currentUser = null;
+                this.bibliotecas = [];
+                this.libros = [];
+                this.currentBibliotecaId = null;
+                this.updateUIForAuthState();
+            }
+        });
+    },
 
-        const appContent = document.getElementById("app-content");
-        const authModal = document.getElementById("auth-modal");
-        const supabaseConfigModal = document.getElementById("supabase-config-modal");
+    // =============================================
+    // AUTENTICACION
+    // =============================================
 
-        console.log("handleAuthChange llamado - user:", user, "profile:", profile);
+    async onUserAuthenticated(user) {
+        this.currentUser = user;
 
-        if (user && profile) {
-            console.log("Usuario autenticado:", user.email, "Rol:", profile.role || profile.rol);
+        // Obtener perfil del usuario
+        const { data: perfil } = await obtenerPerfil();
+        this.isAdmin = perfil?.es_admin || false;
 
-            // Ocultar modals
-            if (authModal) authModal.classList.add("hidden");
-            if (supabaseConfigModal) supabaseConfigModal.classList.add("hidden");
-            if (appContent) appContent.classList.remove("hidden");
+        // Cargar bibliotecas
+        await this.cargarBibliotecas();
 
-            // Habilitar Supabase en storage
-            storage.isSupabaseEnabled = true;
+        // Cargar libros de la primera biblioteca
+        if (this.bibliotecas.length > 0) {
+            this.currentBibliotecaId = this.bibliotecas[0].id;
+            await this.cargarLibros();
+        }
 
-            // Cargar bibliotecas del usuario
-            await this.loadLibraries();
+        this.updateUIForAuthState();
+    },
 
-            // Cargar libros
-            await this.loadAndRenderBooks();
+    updateUIForAuthState() {
+        const appContent = document.getElementById('app-content');
+        const authModal = document.getElementById('auth-modal');
+
+        if (this.currentUser) {
+            // Usuario autenticado
+            if (appContent) appContent.classList.remove('hidden');
+            if (authModal) authModal.classList.add('hidden');
         } else {
-            console.log("Usuario desautenticado");
-
-            // Mostrar modal de configuracion si Supabase esta configurado
-            const hasUrl = localStorage.getItem("supabaseUrl");
-            const hasKey = localStorage.getItem("supabaseAnonKey") || localStorage.getItem("supabaseServiceKey");
-
-            if (hasUrl && hasKey) {
-                if (authModal) this.showAuthModal("login");
-                if (appContent) appContent.classList.add("hidden");
-                if (supabaseConfigModal) supabaseConfigModal.classList.add("hidden");
-            } else {
-                // Mostrar modal de configuracion de Supabase
-                if (supabaseConfigModal) supabaseConfigModal.classList.remove("hidden");
-                if (appContent) appContent.classList.remove("hidden");
-                if (authModal) authModal.classList.add("hidden");
-            }
-            
-            this.books = [];
-            this.filterAndRenderBooks();
-        }
-
-        this.refreshIcons();
-    },
-
-    // Cargar bibliotecas del usuario
-    async loadLibraries() {
-        try {
-            const userId = auth.getUserId();
-            const isAdmin = auth.isAdmin();
-            
-            // Cargar bibliotecas desde storage
-            storage.libraries = await storage.getUserLibraries(userId);
-            
-            // Cargar biblioteca seleccionada
-            storage.loadSavedLibrary();
-
-            if (storage.libraries.length === 0 && this.user) {
-                // Crear biblioteca por defecto si no hay ninguna
-                const defaultLib = await storage.createLibrary('Mi Biblioteca', userId);
-                if (defaultLib) {
-                    storage.libraries = [defaultLib];
-                    storage.currentLibraryId = defaultLib.id;
-                    storage.saveCurrentLibrary(defaultLib);
-                }
-            }
-
-            // Actualizar selector de bibliotecas
-            this.renderLibrarySelector();
-        } catch (error) {
-            console.error('Error al cargar bibliotecas:', error);
+            // No autenticado
+            if (appContent) appContent.classList.add('hidden');
+            if (authModal) authModal.classList.remove('hidden');
         }
     },
 
-    // Renderizar selector de bibliotecas en el header
-    renderLibrarySelector() {
-        const userId = auth.getUserId();
-        const isAdmin = auth.isAdmin();
-        const libraries = storage.libraries;
-
-        // Buscar contenedor para el selector
-        let libSelectorContainer = document.getElementById('library-selector-container');
-
-        if (!libSelectorContainer) {
-            const header = document.querySelector('header div.max-w-6xl');
-            if (header) {
-                const addBookBtn = header.querySelector('button[onclick*="showAddBookModal"]');
-                if (addBookBtn) {
-                    const container = document.createElement('div');
-                    container.id = 'library-selector-container';
-                    container.className = 'hidden md:flex items-center gap-2';
-                    addBookBtn.before(container);
-                    libSelectorContainer = container;
-                }
-            }
-        }
-
-        if (!libSelectorContainer) return;
-
-        // Limpiar contenedor
-        libSelectorContainer.innerHTML = '';
-
-        // Crear selector
-        const select = document.createElement('select');
-        select.id = 'library-selector';
-        select.className = 'bg-white/20 border border-white/30 text-white text-sm rounded-lg px-2 py-1 backdrop-blur-sm';
-
-        // Anadir opciones
-        libraries.forEach(lib => {
-            const option = document.createElement('option');
-            option.value = lib.id;
-            option.textContent = lib.nombre;
-            if (lib.id === storage.currentLibraryId) {
-                option.selected = true;
-            }
-            select.appendChild(option);
-        });
-
-        // Evento change
-        select.addEventListener('change', (e) => {
-            storage.setCurrentLibrary(e.target.value);
-            this.loadAndRenderBooks();
-        });
-
-        // Si hay bibliotecas, mostrar selector
-        if (libraries.length > 0) {
-            const label = document.createElement('span');
-            label.className = 'text-white/80 text-xs hidden sm:inline';
-            label.textContent = 'Biblioteca:';
-            libSelectorContainer.appendChild(label);
-            libSelectorContainer.appendChild(select);
-        }
-
-        // Boton para crear nueva biblioteca
-        if (this.isAuthenticated) {
-            const newLibBtn = document.createElement('button');
-            newLibBtn.innerHTML = '<i data-lucide="folder-plus" class="w-4 h-4"></i>';
-            newLibBtn.className = 'text-white/80 hover:text-white p-1 rounded hover:bg-white/20 transition';
-            newLibBtn.title = 'Crear nueva biblioteca';
-            newLibBtn.onclick = () => this.showNewLibraryModal();
-            libSelectorContainer.appendChild(newLibBtn);
-        }
-
-        this.refreshIcons();
-    },
-
-    // Mostrar modal para crear nueva biblioteca
-    showNewLibraryModal() {
-        const name = prompt('Nombre de la nueva biblioteca:');
-        if (name && name.trim()) {
-            const userId = auth.getUserId();
-            storage.createLibrary(name.trim(), userId).then(lib => {
-                if (lib) {
-                    storage.libraries.push(lib);
-                    storage.setCurrentLibrary(lib.id);
-                    this.renderLibrarySelector();
-                    this.loadAndRenderBooks();
-                }
-            });
-        }
-    },
-
-    // Cargar libros desde storage
-    async loadAndRenderBooks() {
-        try {
-            const libraryId = storage.currentLibraryId;
-            const userId = auth.getUserId();
-
-            // Si es admin y no hay biblioteca seleccionada, cargar todos los libros
-            if (auth.isAdmin() && !libraryId) {
-                this.books = await storage.getAllBooks();
-            } else {
-                this.books = await storage.getAllBooks(libraryId);
-            }
-
-            this.filterAndRenderBooks();
-        } catch (error) {
-            console.error("Error al cargar libros:", error);
-            this.books = [];
-            this.filterAndRenderBooks();
-        }
-    },
-
-    // Calcular estadisticas
-    updateStatistics(filteredBooks) {
-        const total = filteredBooks.length;
-        let totalCompra = 0;
-        let totalVenta = 0;
-
-        filteredBooks.forEach(book => {
-            if (book.precioCompra) totalCompra += book.precioCompra;
-            if (book.precioVenta) totalVenta += book.precioVenta;
-        });
-
-        const formatter = new Intl.NumberFormat('es-ES', {
-            style: 'currency',
-            currency: 'EUR'
-        });
-
-        // Desktop
-        const totalDesk = document.getElementById('stats-total-desktop');
-        if (totalDesk) totalDesk.textContent = total;
-        const compraDesk = document.getElementById('stats-compra-desktop');
-        if (compraDesk) compraDesk.textContent = formatter.format(totalCompra);
-        const ventaDesk = document.getElementById('stats-venta-desktop');
-        if (ventaDesk) ventaDesk.textContent = formatter.format(totalVenta);
-
-        // Movil
-        const totalMob = document.getElementById('stats-total-mobile');
-        if (totalMob) totalMob.textContent = total;
-        const compraMob = document.getElementById('stats-compra-mobile');
-        if (compraMob) compraMob.textContent = formatter.format(totalCompra);
-        const ventaMob = document.getElementById('stats-venta-mobile');
-        if (ventaMob) ventaMob.textContent = formatter.format(totalVenta);
-    },
-
-    // Filtrar, ordenar y renderizar
-    filterAndRenderBooks() {
-        const query = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
-        const sortBy = document.getElementById('sort-select')?.value || 'fechaRegistroDesc';
-
-        // Filtrar por busqueda
-        let filtered = this.books.filter(book => {
-            const matchTitulo = (book.titulo || '').toLowerCase().includes(query);
-            const matchAutor = (book.autor || '').toLowerCase().includes(query);
-            const matchEditorial = (book.editorial || '').toLowerCase().includes(query);
-            const matchISBN = (book.isbn || '').includes(query);
-            return matchTitulo || matchAutor || matchEditorial || matchISBN;
-        });
-
-        // Ordenar
-        filtered.sort((a, b) => {
-            if (sortBy === 'tituloAsc') {
-                return (a.titulo || '').localeCompare(b.titulo || '');
-            } else if (sortBy === 'autorAsc') {
-                return (a.autor || '').localeCompare(b.autor || '');
-            } else if (sortBy === 'precioCompraDesc') {
-                return (b.precioCompra || 0) - (a.precioCompra || 0);
-            } else {
-                return new Date(b.fechaRegistro || b.fecha_registro || 0) - new Date(a.fechaRegistro || a.fecha_registro || 0);
-            }
-        });
-
-        // Actualizar estadisticas
-        this.updateStatistics(this.books);
-
-        const booksGrid = document.getElementById('books-grid');
-        const emptyState = document.getElementById('empty-state');
-        const booksCount = document.getElementById('books-count');
-
-        if (booksCount) booksCount.textContent = filtered.length;
-
-        if (filtered.length === 0) {
-            if (booksGrid) booksGrid.classList.add('hidden');
-            if (emptyState) {
-                emptyState.classList.remove('hidden');
-                const currentLib = storage.getCurrentLibrary();
-                const libName = currentLib?.nombre || 'biblioteca';
-                const emptyMsg = emptyState.querySelector('p');
-                if (emptyMsg) {
-                    emptyMsg.textContent = `Escanea el codigo de barras de un libro o anadelo manualmente para empezar en "${libName}".`;
-                }
-            }
-        } else {
-            if (emptyState) emptyState.classList.add('hidden');
-            if (booksGrid) {
-                booksGrid.classList.remove('hidden');
-                booksGrid.innerHTML = '';
-
-                filtered.forEach(book => this.renderBookCard(book, booksGrid));
-            }
-        }
-
-        this.refreshIcons();
-    },
-
-    // Renderizar tarjeta de libro
-    renderBookCard(book, container) {
-        const card = document.createElement('div');
-        card.className = 'bg-white rounded-xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-md transition cursor-pointer flex flex-col group';
-        card.onclick = () => this.showDetailModal(book.id);
-
-        let coverSrc = '';
-        if (book.portadaUrl) {
-            coverSrc = book.portadaUrl;
-        } else if (book.realPhotos && book.realPhotos.length > 0) {
-            coverSrc = book.realPhotos[0];
-        }
-        else if (book.portada_url) {
-            coverSrc = book.portada_url;
-        } else if (book.real_photos && book.real_photos.length > 0) {
-            coverSrc = book.real_photos[0];
-        }
-
-        const hasCover = coverSrc !== '';
-        const currentLib = storage.getCurrentLibrary();
-        const libName = currentLib?.nombre || 'Desconocida';
-
-        card.innerHTML = `
-            <div class="aspect-[3/4] bg-slate-100 relative overflow-hidden flex items-center justify-center border-b border-slate-100 shrink-0">
-                ${hasCover
-                    ? `<img src="${coverSrc}" alt="Portada de ${book.titulo}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">`
-                    : `<div class="text-slate-300 flex flex-col items-center">
-                         <i data-lucide="book" class="w-10 h-10"></i>
-                         <span class="text-[10px] text-slate-400 mt-1">Sin portada</span>
-                       </div>`
-                }
-                ${book.precioCompra || book.precio_compra
-                    ? `<span class="absolute bottom-2 right-2 bg-slate-900/85 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow">
-                         ${(book.precioCompra || book.precio_compra || 0).toFixed(2)}€
-                       </span>`
-                    : ''
-                }
-            </div>
-            <div class="p-3 flex-1 flex flex-col justify-between">
-                <div>
-                    <h4 class="font-bold text-slate-800 text-xs sm:text-sm line-clamp-2 leading-tight group-hover:text-primary-600 transition" title="${book.titulo}">${book.titulo}</h4>
-                    <p class="text-slate-500 text-[11px] sm:text-xs line-clamp-1 mt-0.5">${book.autor || 'Autor desconocido'}</p>
-                </div>
-                <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-50 text-[10px] text-slate-400">
-                    <span class="truncate max-w-[70px]">${book.editorial || ''}</span>
-                    <span>${book.anio || book.anio || ''}</span>
-                </div>
-                ${!auth.isAdmin() ? `<div class="text-xs text-slate-400 mt-1 truncate">${libName}</div>` : ''}
-            </div>
-        `;
-
-        container.appendChild(card);
-        this.refreshIcons();
-    },
-
-    // ============ MODALES ============
-
-    // Modal de configuracion de Supabase
-    showSupabaseConfigModal() {
-        const modal = document.getElementById("supabase-config-modal");
-        if (modal) {
-            modal.classList.remove("hidden");
-            document.getElementById("supabase-url-input").value = localStorage.getItem("supabaseUrl") || "";
-            document.getElementById("supabase-anon-key-input").value = localStorage.getItem("supabaseAnonKey") || "";
-            document.getElementById("supabase-service-key-input").value = localStorage.getItem("supabaseServiceKey") || "";
-        }
-    },
-
-    closeSupabaseConfigModal() {
-        const modal = document.getElementById("supabase-config-modal");
-        if (modal) modal.classList.add("hidden");
-    },
-
-    handleSupabaseConfig(event) {
-        event.preventDefault();
-        const url = document.getElementById("supabase-url-input").value.trim();
-        const anonKey = document.getElementById("supabase-anon-key-input").value.trim();
-        const serviceKey = document.getElementById("supabase-service-key-input").value.trim();
-
-        // Validar que al menos tengamos URL
-        if (!url) {
-            alert("Por favor, introduce la URL de tu proyecto Supabase.");
-            return;
-        }
-
-        // Validar que tengamos al menos una clave
-        if (!anonKey && !serviceKey) {
-            alert("Por favor, introduce al menos la URL y una clave (ANON KEY o SERVICE KEY). La SERVICE KEY es obligatoria para registrar usuarios.");
-            return;
-        }
-
-        // Guardar configuración
-        localStorage.setItem("supabaseUrl", url);
-        
-        if (anonKey) {
-            localStorage.setItem("supabaseAnonKey", anonKey);
-        }
-        
-        if (serviceKey) {
-            localStorage.setItem("supabaseServiceKey", serviceKey);
-        }
-
-        // Advertencia si solo se usa anon key (no podrá registrar usuarios)
-        if (anonKey && !serviceKey) {
-            if (!confirm("ADVERTENCIA: Con solo la ANON KEY no podrás registrar usuarios ni guardar libros. Necesitas la SERVICE KEY o desactivar RLS en Supabase. ¿Continuar de todos modos?")) {
-                return;
-            }
-        }
-
-        this.closeSupabaseConfigModal();
-        auth.initSupabase();
-    },
-
-    // Modal de autenticacion
-    showAuthModal(tab = "login") {
-        const modal = document.getElementById("auth-modal");
-        if (modal) {
-            modal.classList.remove("hidden");
+    showAuthModal(tab = 'login') {
+        const authModal = document.getElementById('auth-modal');
+        if (authModal) {
+            authModal.classList.remove('hidden');
             this.switchAuthTab(tab);
         }
     },
 
     closeAuthModal() {
-        const modal = document.getElementById("auth-modal");
-        if (modal) modal.classList.add("hidden");
+        const authModal = document.getElementById('auth-modal');
+        if (authModal) authModal.classList.add('hidden');
     },
 
     switchAuthTab(tab) {
-        const btnLogin = document.getElementById("auth-tab-btn-login");
-        const btnSignup = document.getElementById("auth-tab-btn-signup");
-        const contentLogin = document.getElementById("auth-tab-content-login");
-        const contentSignup = document.getElementById("auth-tab-content-signup");
-        const title = document.querySelector("#auth-modal h3");
+        const loginBtn = document.getElementById('auth-tab-btn-login');
+        const signupBtn = document.getElementById('auth-tab-btn-signup');
+        const loginContent = document.getElementById('auth-tab-content-login');
+        const signupContent = document.getElementById('auth-tab-content-signup');
 
-        if (tab === "login") {
-            btnLogin?.classList.add("border-primary-500", "text-primary-600");
-            btnLogin?.classList.remove("border-transparent", "text-slate-500", "hover:text-slate-800");
-            btnSignup?.classList.add("border-transparent", "text-slate-500", "hover:text-slate-800");
-            btnSignup?.classList.remove("border-primary-500", "text-primary-600");
-            contentLogin?.classList.add("active");
-            contentSignup?.classList.remove("active");
-            if (title) title.textContent = "Iniciar Sesion";
+        if (tab === 'login') {
+            loginBtn?.classList.add('border-primary-500', 'text-primary-600');
+            loginBtn?.classList.remove('border-transparent', 'text-slate-500');
+            signupBtn?.classList.add('border-transparent', 'text-slate-500');
+            signupBtn?.classList.remove('border-primary-500', 'text-primary-600');
+            loginContent?.classList.add('active');
+            signupContent?.classList.remove('active');
         } else {
-            btnSignup?.classList.add("border-primary-500", "text-primary-600");
-            btnSignup?.classList.remove("border-transparent", "text-slate-500", "hover:text-slate-800");
-            btnLogin?.classList.add("border-transparent", "text-slate-500", "hover:text-slate-800");
-            btnLogin?.classList.remove("border-primary-500", "text-primary-600");
-            contentSignup?.classList.add("active");
-            contentLogin?.classList.remove("active");
-            if (title) title.textContent = "Registrarse";
-        }
-        this.refreshIcons();
-    },
-
-    async handleLogin(event) {
-        event.preventDefault();
-        const email = document.getElementById("login-email").value;
-        const password = document.getElementById("login-password").value;
-        try {
-            await auth.signIn(email, password);
-            this.closeAuthModal();
-            this.handleAuthChange(auth.getUser(), auth.getProfile());
-        } catch (error) {
-            alert("Error al iniciar sesion: " + error.message);
-            console.error("Error login:", error);
+            signupBtn?.classList.add('border-primary-500', 'text-primary-600');
+            signupBtn?.classList.remove('border-transparent', 'text-slate-500');
+            loginBtn?.classList.add('border-transparent', 'text-slate-500');
+            loginBtn?.classList.remove('border-primary-500', 'text-primary-600');
+            signupContent?.classList.add('active');
+            loginContent?.classList.remove('active');
         }
     },
 
-    async handleSignup(event) {
-        event.preventDefault();
-        const email = document.getElementById("signup-email").value;
-        const password = document.getElementById("signup-password").value;
-        try {
-            await auth.signUp(email, password);
-            alert('¡Registro exitoso! Ya puedes iniciar sesion.');
-            this.closeAuthModal();
-            this.showAuthModal('login');
-        } catch (error) {
-            alert("Error en el registro: " + error.message);
-            console.error("Error signup:", error);
-        }
-    },
+    // =============================================
+    // BIBLIOTECAS
+    // =============================================
 
-    async handleLogout() {
-        if (confirm("¿Estas seguro de que quieres cerrar sesion?")) {
-            try {
-                await auth.signOut();
-                this.handleAuthChange(null, null);
-            } catch (error) {
-                alert("Error al cerrar sesion: " + error.message);
-            }
-        }
-    },
-
-    // ============ MODAL ANADIR LIBRO ============
-
-    showAddBookModal(tab = 'scan') {
-        if (!this.isAuthenticated) {
-            alert("Debes iniciar sesion para anadir libros.");
-            this.showAuthModal("login");
+    async cargarBibliotecas() {
+        const { data, error } = await obtenerBibliotecas();
+        if (error) {
+            console.error('Error al cargar bibliotecas:', error);
             return;
         }
-        const modal = document.getElementById('add-book-modal');
-        if (modal) {
-            modal.classList.remove('hidden');
-            this.switchModalTab(tab);
-            document.getElementById('book-form')?.reset();
-            document.getElementById('form-book-id').value = '';
-            document.getElementById('isbn-input').value = '';
-            this.currentPhotos = [];
-            this.renderFormPhotosPreview();
+        this.bibliotecas = data;
+        this.actualizarSelectBiblioteca();
+    },
+
+    actualizarSelectBiblioteca() {
+        const selectContainer = document.getElementById('biblioteca-select-container');
+        const select = document.getElementById('biblioteca-select');
+
+        if (!select || !selectContainer) return;
+
+        // Limpiar opciones
+        select.innerHTML = '';
+
+        // Anadir opciones
+        this.bibliotecas.forEach(bib => {
+            const option = document.createElement('option');
+            option.value = bib.id;
+            option.textContent = bib.nombre;
+            if (bib.id === this.currentBibliotecaId) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+
+        // Mostrar selector solo si hay mas de una biblioteca
+        selectContainer.style.display = this.bibliotecas.length > 1 ? 'block' : 'none';
+    },
+
+    async cambiarBiblioteca(bibliotecaId) {
+        this.currentBibliotecaId = bibliotecaId;
+        await this.cargarLibros();
+    },
+
+    async crearBiblioteca() {
+        const nombre = prompt('Nombre de la nueva biblioteca:', 'Nueva Biblioteca');
+        if (!nombre) return;
+
+        const { data, error } = await crearBiblioteca(nombre);
+        if (error) {
+            alert('Error al crear biblioteca: ' + error.message);
+            return;
         }
+
+        // Anadir a la lista local
+        this.bibliotecas.push(data);
+        this.currentBibliotecaId = data.id;
+        this.actualizarSelectBiblioteca();
+        await this.cargarLibros();
+    },
+
+    // =============================================
+    // LIBROS
+    // =============================================
+
+    async cargarLibros() {
+        if (!this.currentBibliotecaId) return;
+
+        const { data, error } = await obtenerLibros(this.currentBibliotecaId);
+        if (error) {
+            console.error('Error al cargar libros:', error);
+            return;
+        }
+        this.libros = data;
+        this.renderizarLibros();
+        this.actualizarEstadisticas();
+    },
+
+    renderizarLibros() {
+        const booksGrid = document.getElementById('books-grid');
+        const emptyState = document.getElementById('empty-state');
+
+        if (!booksGrid || !emptyState) return;
+
+        if (this.libros.length === 0) {
+            booksGrid.classList.add('hidden');
+            emptyState.classList.remove('hidden');
+        } else {
+            booksGrid.classList.remove('hidden');
+            emptyState.classList.add('hidden');
+
+            // Limpiar grid
+            booksGrid.innerHTML = '';
+
+            // Renderizar cada libro
+            this.libros.forEach(libro => {
+                const bookCard = this.crearTarjetaLibro(libro);
+                booksGrid.appendChild(bookCard);
+            });
+        }
+
+        // Actualizar contador
+        const booksCount = document.getElementById('books-count');
+        if (booksCount) {
+            booksCount.textContent = this.libros.length;
+        }
+    },
+
+    crearTarjetaLibro(libro) {
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden group cursor-pointer transition hover:shadow-md';
+        card.onclick = () => this.mostrarDetalleLibro(libro.id);
+
+        // Portada
+        const coverDiv = document.createElement('div');
+        coverDiv.className = 'bg-slate-100 aspect-[3/4] overflow-hidden relative';
+
+        if (libro.portada_url) {
+            const img = document.createElement('img');
+            img.src = libro.portada_url;
+            img.alt = libro.titulo;
+            img.className = 'w-full h-full object-cover';
+            img.onerror = () => {
+                img.onerror = null;
+                img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300"%3E%3Crect width="200" height="300" fill="%23f3f4f6"%2F%3E%3Ctext x="100" y="150" text-anchor="middle" fill="%236b7280" font-family="Arial" font-size="14"%3EMi Libro%3C/text%3E%3C/svg%3E';
+            };
+            coverDiv.appendChild(img);
+        } else {
+            const placeholder = document.createElement('div');
+            placeholder.className = 'w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-50';
+            placeholder.innerHTML = `
+                <i data-lucide="book" class="w-12 h-12 mb-2"></i>
+                <span class="text-xs">Sin portada</span>
+            `;
+            coverDiv.appendChild(placeholder);
+        }
+
+        // Info
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'p-3 space-y-1';
+
+        const title = document.createElement('h3');
+        title.className = 'font-semibold text-slate-800 text-sm line-clamp-2';
+        title.textContent = libro.titulo;
+        infoDiv.appendChild(title);
+
+        if (libro.autores && libro.autores.length > 0) {
+            const authors = document.createElement('p');
+            authors.className = 'text-xs text-slate-500 line-clamp-1';
+            authors.textContent = libro.autores.join(', ');
+            infoDiv.appendChild(authors);
+        }
+
+        const pricesDiv = document.createElement('div');
+        pricesDiv.className = 'flex justify-between text-xs mt-2';
+
+        const precioCompra = document.createElement('span');
+        precioCompra.className = 'font-bold text-slate-600';
+        precioCompra.textContent = `${libro.precio_compra || 0} €`;
+        pricesDiv.appendChild(precioCompra);
+
+        const precioVenta = document.createElement('span');
+        precioVenta.className = 'font-bold text-emerald-600';
+        precioVenta.textContent = `${libro.precio_venta_estimado || 0} €`;
+        pricesDiv.appendChild(precioVenta);
+
+        infoDiv.appendChild(pricesDiv);
+
+        card.appendChild(coverDiv);
+        card.appendChild(infoDiv);
+
+        return card;
+    },
+
+    mostrarDetalleLibro(libroId) {
+        const libro = this.libros.find(l => l.id === libroId);
+        if (!libro) return;
+
+        const modal = document.getElementById('detail-book-modal');
+        if (modal) modal.classList.remove('hidden');
+
+        // Rellenar datos
+        document.getElementById('detail-titulo').textContent = libro.titulo || 'Sin titulo';
+        document.getElementById('detail-autor').textContent = libro.autores?.join(', ') || 'Autor desconocido';
+        document.getElementById('detail-editorial').textContent = libro.editorial || '-';
+        document.getElementById('detail-anio').textContent = libro.anio_publicacion || '-';
+        document.getElementById('detail-isbn').textContent = `ISBN: ${libro.isbn || '-'}`;
+        document.getElementById('detail-descripcion').textContent = libro.descripcion || 'No hay descripcion disponible.';
+        document.getElementById('detail-precio-compra').textContent = `${libro.precio_compra || 0} €`;
+        document.getElementById('detail-precio-venta').textContent = `${libro.precio_venta_estimado || 0} €`;
+        document.getElementById('detail-fecha-compra').textContent = libro.fecha_compra ? new Date(libro.fecha_compra).toLocaleDateString() : '-';
+
+        // Portada
+        const portadaImg = document.getElementById('detail-portada');
+        const portadaPlaceholder = document.getElementById('detail-portada-placeholder');
+
+        if (libro.portada_url) {
+            portadaImg.src = libro.portada_url;
+            portadaImg.classList.remove('hidden');
+            portadaPlaceholder.classList.add('hidden');
+        } else {
+            portadaImg.classList.add('hidden');
+            portadaPlaceholder.classList.remove('hidden');
+        }
+
+        // Configurar botones de accion
+        document.getElementById('btn-edit-book').onclick = () => this.editarLibro(libro);
+        document.getElementById('btn-delete-book').onclick = () => this.confirmarEliminarLibro(libro);
+
+        // Cargar fotos reales
+        this.cargarFotosRealesLibro(libroId);
+    },
+
+    async cargarFotosRealesLibro(libroId) {
+        const section = document.getElementById('detail-real-photos-section');
+        const grid = document.getElementById('detail-real-photos-grid');
+
+        if (!section || !grid) return;
+
+        const { data: fotos, error } = await obtenerFotosLibro(libroId);
+        if (error || !fotos || fotos.length === 0) {
+            section.classList.add('hidden');
+            return;
+        }
+
+        section.classList.remove('hidden');
+        grid.innerHTML = '';
+
+        fotos.forEach(foto => {
+            const imgContainer = document.createElement('div');
+            imgContainer.className = 'relative rounded-lg overflow-hidden border border-slate-200';
+
+            const img = document.createElement('img');
+            img.src = foto.url;
+            img.alt = 'Foto real';
+            img.className = 'w-full h-24 object-cover';
+
+            imgContainer.appendChild(img);
+            grid.appendChild(imgContainer);
+        });
+    },
+
+    // =============================================
+    // MODALES DE LIBRO
+    // =============================================
+
+    showAddBookModal(mode = 'scan') {
+        const modal = document.getElementById('add-book-modal');
+        if (modal) modal.classList.remove('hidden');
+
+        // Seleccionar tab
+        this.switchModalTab(mode);
+
+        // Reiniciar formulario
+        this.resetBookForm();
     },
 
     closeAddBookModal() {
         const modal = document.getElementById('add-book-modal');
-        if (modal) {
-            modal.classList.add('hidden');
-            scanner.stopScanner();
-        }
+        if (modal) modal.classList.add('hidden');
     },
 
     switchModalTab(tab) {
-        const btnScan = document.getElementById('tab-btn-scan');
-        const btnManual = document.getElementById('tab-btn-manual');
-        const contentScan = document.getElementById('tab-content-scan');
-        const contentManual = document.getElementById('tab-content-manual');
+        const scanBtn = document.getElementById('tab-btn-scan');
+        const manualBtn = document.getElementById('tab-btn-manual');
+        const scanContent = document.getElementById('tab-content-scan');
+        const manualContent = document.getElementById('tab-content-manual');
 
         if (tab === 'scan') {
-            btnScan?.classList.add('border-primary-500', 'text-primary-600');
-            btnScan?.classList.remove('border-transparent', 'text-slate-500');
-            btnManual?.classList.add('border-transparent', 'text-slate-500');
-            btnManual?.classList.remove('border-primary-500', 'text-primary-600');
-            contentScan?.classList.add('active');
-            contentManual?.classList.remove('active');
+            scanBtn?.classList.add('border-primary-500', 'text-primary-600');
+            scanBtn?.classList.remove('border-transparent', 'text-slate-500');
+            manualBtn?.classList.add('border-transparent', 'text-slate-500');
+            manualBtn?.classList.remove('border-primary-500', 'text-primary-600');
+            scanContent?.classList.add('active');
+            manualContent?.classList.remove('active');
         } else {
-            btnManual?.classList.add('border-primary-500', 'text-primary-600');
-            btnManual?.classList.remove('border-transparent', 'text-slate-500');
-            btnScan?.classList.add('border-transparent', 'text-slate-500');
-            btnScan?.classList.remove('border-primary-500', 'text-primary-600');
-            contentManual?.classList.add('active');
-            contentScan?.classList.remove('active');
-            scanner.stopScanner();
+            manualBtn?.classList.add('border-primary-500', 'text-primary-600');
+            manualBtn?.classList.remove('border-transparent', 'text-slate-500');
+            scanBtn?.classList.add('border-transparent', 'text-slate-500');
+            scanBtn?.classList.remove('border-primary-500', 'text-primary-600');
+            manualContent?.classList.add('active');
+            scanContent?.classList.remove('active');
         }
     },
 
-    // ============ ISBN Y ESCANER ============
+    resetBookForm() {
+        document.getElementById('form-book-id').value = '';
+        document.getElementById('form-biblioteca-id').value = this.currentBibliotecaId || '';
+        document.getElementById('form-titulo').value = '';
+        document.getElementById('form-autor').value = '';
+        document.getElementById('form-isbn').value = '';
+        document.getElementById('form-editorial').value = '';
+        document.getElementById('form-anio').value = '';
+        document.getElementById('form-descripcion').value = '';
+        document.getElementById('form-portada-url').value = '';
+        document.getElementById('form-precio-compra').value = '';
+        document.getElementById('form-precio-venta').value = '';
+        document.getElementById('form-fecha-compra').value = '';
 
-    async lookupISBN(manualIsbn = null) {
-        const isbnVal = manualIsbn || document.getElementById('isbn-input')?.value;
-        if (!isbnVal) {
-            alert('Ingresa un numero de ISBN primero.');
+        // Limpiar previsualizacion de fotos
+        const preview = document.getElementById('form-photos-preview');
+        if (preview) preview.innerHTML = '';
+    },
+
+    editarLibro(libro) {
+        this.showAddBookModal('manual');
+
+        // Rellenar formulario
+        document.getElementById('form-book-id').value = libro.id;
+        document.getElementById('form-biblioteca-id').value = libro.biblioteca_id;
+        document.getElementById('form-titulo').value = libro.titulo || '';
+        document.getElementById('form-autor').value = libro.autores?.join(', ') || '';
+        document.getElementById('form-isbn').value = libro.isbn || '';
+        document.getElementById('form-editorial').value = libro.editorial || '';
+        document.getElementById('form-anio').value = libro.anio_publicacion || '';
+        document.getElementById('form-descripcion').value = libro.descripcion || '';
+        document.getElementById('form-portada-url').value = libro.portada_url || '';
+        document.getElementById('form-precio-compra').value = libro.precio_compra || '';
+        document.getElementById('form-precio-venta').value = libro.precio_venta_estimado || '';
+        document.getElementById('form-fecha-compra').value = libro.fecha_compra || '';
+
+        // Cargar fotos para previsualizacion (opcional)
+        this.cargarFotosEnFormulario(libro.id);
+    },
+
+    async cargarFotosEnFormulario(libroId) {
+        const { data: fotos } = await obtenerFotosLibro(libroId);
+        if (!fotos || fotos.length === 0) return;
+
+        const preview = document.getElementById('form-photos-preview');
+        if (!preview) return;
+
+        preview.innerHTML = '';
+
+        fotos.forEach(foto => {
+            const imgContainer = document.createElement('div');
+            imgContainer.className = 'relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200';
+
+            const img = document.createElement('img');
+            img.src = foto.url;
+            img.className = 'w-full h-full object-cover';
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs';
+            removeBtn.innerHTML = '<i data-lucide="x" class="w-3 h-3"></i>';
+            removeBtn.onclick = (e) => {
+                e.stopPropagation();
+                // Aqui podrias eliminar la foto de Supabase Storage
+                imgContainer.remove();
+            };
+
+            imgContainer.appendChild(img);
+            imgContainer.appendChild(removeBtn);
+            preview.appendChild(imgContainer);
+        });
+    },
+
+    confirmarEliminarLibro(libro) {
+        if (!confirm(`Estas seguro de que quieres eliminar "${libro.titulo}"?`)) {
+            return;
+        }
+        this.eliminarLibro(libro);
+    },
+
+    async eliminarLibro(libro) {
+        const { error } = await eliminarLibro(libro.id);
+        if (error) {
+            alert('Error al eliminar el libro: ' + error.message);
             return;
         }
 
-        const btn = document.querySelector('button[onclick="app.lookupISBN()"]');
-        const originalContent = btn ? btn.innerHTML : '';
-        if (btn) btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Buscando...</span>';
-        this.refreshIcons();
+        // Actualizar lista local
+        this.libros = this.libros.filter(l => l.id !== libro.id);
+        this.renderizarLibros();
+        this.actualizarEstadisticas();
 
-        try {
-            const bookData = await api.lookupBook(isbnVal);
-            document.getElementById('form-titulo').value = bookData.titulo;
-            document.getElementById('form-autor').value = bookData.autor;
-            document.getElementById('form-isbn').value = bookData.isbn;
-            document.getElementById('form-editorial').value = bookData.editorial;
-            document.getElementById('form-anio').value = bookData.anio;
-            document.getElementById('form-descripcion').value = bookData.descripcion;
-            document.getElementById('form-portada-url').value = bookData.portadaUrl;
-            this.switchModalTab('manual');
-        } catch (err) {
-            console.error(err);
-            alert(err.message || 'No se pudo encontrar el libro. Prueba a ingresarlo de manera manual.');
-            this.switchModalTab('manual');
-            document.getElementById('form-isbn').value = isbnVal;
-        } finally {
-            if (btn) btn.innerHTML = originalContent;
-            this.refreshIcons();
-        }
-    },
-
-    // ============ FOTOS REALES ============
-
-    handleRealPhotos(event) {
-        const files = event.target.files;
-        if (!files || files.length === 0) return;
-
-        Array.from(files).forEach(file => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                this.currentPhotos.push(e.target.result);
-                this.renderFormPhotosPreview();
-            };
-            reader.readAsDataURL(file);
-        });
-
-        event.target.value = '';
-    },
-
-    renderFormPhotosPreview() {
-        const container = document.getElementById('form-photos-preview');
-        if (!container) return;
-
-        container.innerHTML = '';
-        this.currentPhotos.forEach((photoData, index) => {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'w-16 h-16 rounded-lg overflow-hidden relative border border-slate-200 shadow-sm shrink-0 group';
-
-            wrapper.innerHTML = `
-                <img src="${photoData}" alt="Foto real" class="w-full h-full object-cover">
-                <button type="button" onclick="app.removeFormPhoto(${index})" class="absolute inset-0 bg-red-600/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-150">
-                  <i data-lucide="trash-2" class="w-4 h-4"></i>
-                </button>
-            `;
-            container.appendChild(wrapper);
-        });
-
-        this.refreshIcons();
-    },
-
-    removeFormPhoto(index) {
-        this.currentPhotos.splice(index, 1);
-        this.renderFormPhotosPreview();
-    },
-
-    // ============ GUARDAR LIBRO ============
-
-    async saveBook(event) {
-        event.preventDefault();
-
-        const bookId = document.getElementById('form-book-id').value;
-        const title = document.getElementById('form-titulo').value;
-        const autor = document.getElementById('form-autor').value;
-        const isbn = document.getElementById('form-isbn').value;
-        const editorial = document.getElementById('form-editorial').value;
-        const anio = document.getElementById('form-anio').value;
-        const descripcion = document.getElementById('form-descripcion').value;
-        const portadaUrl = document.getElementById('form-portada-url').value;
-        const precioCompra = document.getElementById('form-precio-compra').value;
-        const precioVenta = document.getElementById('form-precio-venta').value;
-        const fechaCompra = document.getElementById('form-fecha-compra').value;
-
-        const bookToSave = {
-            id: bookId ? (typeof bookId === 'number' ? bookId : parseInt(bookId, 10)) : undefined,
-            titulo: title,
-            autor: autor,
-            isbn: api.cleanISBN(isbn),
-            editorial: editorial,
-            anio: anio,
-            descripcion: descripcion,
-            portadaUrl: portadaUrl,
-            precioCompra: precioCompra ? parseFloat(precioCompra) : null,
-            precioVenta: precioVenta ? parseFloat(precioVenta) : null,
-            fechaCompra: fechaCompra || null,
-            realPhotos: this.currentPhotos,
-            library_id: storage.currentLibraryId
-        };
-
-        if (bookId) {
-            const numericBookId = typeof bookId === 'number' ? bookId : parseInt(bookId, 10);
-            const originalBook = this.books.find(b => b.id === numericBookId || b.id === bookId);
-            if (originalBook) {
-                bookToSave.fechaRegistro = originalBook.fechaRegistro || originalBook.fecha_registro;
-            }
-        }
-
-        try {
-            await storage.saveBook(bookToSave);
-            this.closeAddBookModal();
-            await this.loadAndRenderBooks();
-
-            const detailModal = document.getElementById('detail-book-modal');
-            if (detailModal && !detailModal.classList.contains('hidden') && bookId) {
-                this.showDetailModal(bookId);
-            }
-        } catch (err) {
-            console.error('Error al guardar el libro:', err);
-            alert('Hubo un error al guardar el libro.');
-        }
-    },
-
-    // ============ MODAL DETALLES LIBRO ============
-
-    async showDetailModal(bookId) {
-        try {
-            const book = await storage.getBook(bookId);
-            if (!book) return;
-
-            const modal = document.getElementById('detail-book-modal');
-            if (!modal) return;
-
-            // Datos basicos
-            document.getElementById('detail-titulo').textContent = book.titulo || 'Sin titulo';
-            document.getElementById('detail-autor').textContent = book.autor || 'Autor desconocido';
-            document.getElementById('detail-editorial').textContent = book.editorial || '-';
-            document.getElementById('detail-anio').textContent = book.anio || '-';
-            document.getElementById('detail-descripcion').textContent = book.descripcion || 'No hay descripcion disponible.';
-            document.getElementById('detail-isbn').textContent = book.isbn ? `ISBN: ${book.isbn}` : 'Sin ISBN';
-
-            // Precios
-            const formatter = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
-            document.getElementById('detail-precio-compra').textContent = book.precioCompra || book.precio_compra ? formatter.format(book.precioCompra || book.precio_compra) : '-';
-            document.getElementById('detail-precio-venta').textContent = book.precioVenta || book.precio_venta ? formatter.format(book.precioVenta || book.precio_venta) : '-';
-
-            // Fecha compra
-            const fechaCompra = book.fechaCompra || book.fecha_compra;
-            if (fechaCompra) {
-                const parts = fechaCompra.split('-');
-                const dateFormatted = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : fechaCompra;
-                document.getElementById('detail-fecha-compra').textContent = dateFormatted;
-            } else {
-                document.getElementById('detail-fecha-compra').textContent = '-';
-            }
-
-            // Portada
-            const coverImg = document.getElementById('detail-portada');
-            const coverPlaceholder = document.getElementById('detail-portada-placeholder');
-
-            let coverSrc = book.portadaUrl || book.portada_url;
-            if (!coverSrc && book.realPhotos && book.realPhotos.length > 0) {
-                coverSrc = book.realPhotos[0];
-            }
-            else if (!coverSrc && book.real_photos && book.real_photos.length > 0) {
-                coverSrc = book.real_photos[0];
-            }
-
-            if (coverSrc) {
-                coverImg.src = coverSrc;
-                coverImg.classList.remove('hidden');
-                coverPlaceholder.classList.add('hidden');
-            } else {
-                coverImg.classList.add('hidden');
-                coverPlaceholder.classList.remove('hidden');
-            }
-
-            // Fotos reales
-            const realPhotosSection = document.getElementById('detail-real-photos-section');
-            const realPhotosGrid = document.getElementById('detail-real-photos-grid');
-
-            const photos = book.realPhotos || book.real_photos || [];
-            if (photos.length > 0) {
-                if (realPhotosSection) realPhotosSection.classList.remove('hidden');
-                if (realPhotosGrid) {
-                    realPhotosGrid.innerHTML = '';
-                    photos.forEach((photoBase64) => {
-                        const imgContainer = document.createElement('div');
-                        imgContainer.className = 'aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100 relative shadow-sm cursor-zoom-in group';
-                        imgContainer.onclick = () => this.fullscreenPhoto(photoBase64);
-                        imgContainer.innerHTML = `<img src="${photoBase64}" alt="Foto real" class="w-full h-full object-cover group-hover:scale-105 transition">`;
-                        realPhotosGrid.appendChild(imgContainer);
-                    });
-                }
-            } else {
-                if (realPhotosSection) realPhotosSection.classList.add('hidden');
-            }
-
-            // Botones de accion
-            const btnEdit = document.getElementById('btn-edit-book');
-            const btnDelete = document.getElementById('btn-delete-book');
-
-            const canEdit = auth.isAdmin() || book.user_id === auth.getUserId();
-
-            if (btnEdit) {
-                btnEdit.onclick = () => {
-                    if (canEdit) {
-                        this.closeDetailModal();
-                        this.editBook(book);
-                    } else {
-                        alert('No tienes permisos para editar este libro.');
-                    }
-                };
-            }
-
-            if (btnDelete) {
-                btnDelete.onclick = () => {
-                    if (canEdit) {
-                        if (confirm(`¿Estas seguro de que quieres eliminar "${book.titulo}"?`)) {
-                            this.deleteBook(book);
-                        }
-                    } else {
-                        alert('No tienes permisos para eliminar este libro.');
-                    }
-                };
-            }
-
-            modal.classList.remove('hidden');
-            this.refreshIcons();
-
-        } catch (err) {
-            console.error('Error al cargar detalle:', err);
-        }
+        this.closeDetailModal();
     },
 
     closeDetailModal() {
@@ -834,51 +536,341 @@ const app = {
         if (modal) modal.classList.add('hidden');
     },
 
-    editBook(book) {
-        this.showAddBookModal('manual');
+    async saveBook(event) {
+        event.preventDefault();
 
-        document.getElementById('form-book-id').value = book.id || '';
-        document.getElementById('form-titulo').value = book.titulo || '';
-        document.getElementById('form-autor').value = book.autor || '';
-        document.getElementById('form-isbn').value = book.isbn || '';
-        document.getElementById('form-editorial').value = book.editorial || '';
-        document.getElementById('form-anio').value = book.anio || '';
-        document.getElementById('form-descripcion').value = book.descripcion || '';
-        document.getElementById('form-portada-url').value = book.portadaUrl || book.portada_url || '';
-        document.getElementById('form-precio-compra').value = book.precioCompra || book.precio_compra || '';
-        document.getElementById('form-precio-venta').value = book.precioVenta || book.precio_venta || '';
-        document.getElementById('form-fecha-compra').value = book.fechaCompra || book.fecha_compra || '';
+        const formData = {
+            id: document.getElementById('form-book-id').value,
+            biblioteca_id: document.getElementById('form-biblioteca-id').value || this.currentBibliotecaId,
+            titulo: document.getElementById('form-titulo').value,
+            autores: document.getElementById('form-autor').value.split(',').map(a => a.trim()).filter(a => a),
+            isbn: document.getElementById('form-isbn').value,
+            editorial: document.getElementById('form-editorial').value,
+            anio_publicacion: document.getElementById('form-anio').value,
+            descripcion: document.getElementById('form-descripcion').value,
+            portada_url: document.getElementById('form-portada-url').value,
+            precio_compra: parseFloat(document.getElementById('form-precio-compra').value) || 0,
+            precio_venta_estimado: parseFloat(document.getElementById('form-precio-venta').value) || 0,
+            fecha_compra: document.getElementById('form-fecha-compra').value
+        };
 
-        this.currentPhotos = [...(book.realPhotos || book.real_photos || [])];
-        this.renderFormPhotosPreview();
+        // Validar
+        if (!formData.titulo) {
+            alert('El titulo es obligatorio');
+            return;
+        }
+
+        // Guardar libro
+        const { data: libro, error } = await guardarLibro(formData);
+        if (error) {
+            alert('Error al guardar el libro: ' + error.message);
+            return;
+        }
+
+        // Subir fotos reales si las hay
+        const fotoInput = document.getElementById('form-real-photo-input');
+        if (fotoInput?.files?.length > 0) {
+            const { urls } = await subirFotosLibro(libro.id, Array.from(fotoInput.files));
+            if (urls.length > 0) {
+                await guardarFotosLibro(libro.id, urls);
+            }
+        }
+
+        // Actualizar lista local
+        if (formData.id) {
+            // Actualizar libro existente
+            const index = this.libros.findIndex(l => l.id === formData.id);
+            if (index !== -1) {
+                this.libros[index] = { ...libro, bibliotecas: this.libros[index].bibliotecas };
+            }
+        } else {
+            // Anadir nuevo libro
+            this.libros.unshift({ ...libro, bibliotecas: { nombre: this.bibliotecas.find(b => b.id === libro.biblioteca_id)?.nombre } });
+        }
+
+        this.renderizarLibros();
+        this.actualizarEstadisticas();
+        this.closeAddBookModal();
+        this.resetBookForm();
     },
 
-    async deleteBook(id) {
+    // =============================================
+    // BUSQUEDA
+    // =============================================
+
+    setupSearch() {
+        const searchInput = document.getElementById('search-input');
+        if (!searchInput) return;
+
+        let timeout = null;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                this.buscarLibros(e.target.value);
+            }, 500);
+        });
+    },
+
+    async buscarLibros(texto) {
+        if (!texto.trim()) {
+            await this.cargarLibros();
+            return;
+        }
+
+        if (!this.currentBibliotecaId) return;
+
+        const { data, error } = await app.supabase
+            .from('libros')
+            .select('*, bibliotecas(nombre)')
+            .eq('biblioteca_id', this.currentBibliotecaId)
+            .or(`titulo.ilike.%${texto}%,autores.ilike.%${texto}%,editorial.ilike.%${texto}%,isbn.ilike.%${texto}%`)
+            .order('fecha_registro', { ascending: false });
+
+        if (error) {
+            console.error('Error al buscar:', error);
+            return;
+        }
+
+        this.libros = data || [];
+        this.renderizarLibros();
+    },
+
+    // =============================================
+    // ESTADISTICAS
+    // =============================================
+
+    async actualizarEstadisticas() {
+        if (!this.currentBibliotecaId) return;
+
+        // Calcular localmente (mas rapido)
+        const totalLibros = this.libros.length;
+        const inversionTotal = this.libros.reduce((sum, libro) => sum + (libro.precio_compra || 0), 0);
+        const valorVentaTotal = this.libros.reduce((sum, libro) => sum + (libro.precio_venta_estimado || 0), 0);
+
+        // Actualizar en movil
+        const statsTotalMobile = document.getElementById('stats-total-mobile');
+        const statsCompraMobile = document.getElementById('stats-compra-mobile');
+        const statsVentaMobile = document.getElementById('stats-venta-mobile');
+
+        if (statsTotalMobile) statsTotalMobile.textContent = totalLibros;
+        if (statsCompraMobile) statsCompraMobile.textContent = `${inversionTotal.toFixed(2)}€`;
+        if (statsVentaMobile) statsVentaMobile.textContent = `${valorVentaTotal.toFixed(2)}€`;
+
+        // Actualizar en desktop
+        const statsTotalDesktop = document.getElementById('stats-total-desktop');
+        const statsCompraDesktop = document.getElementById('stats-compra-desktop');
+        const statsVentaDesktop = document.getElementById('stats-venta-desktop');
+
+        if (statsTotalDesktop) statsTotalDesktop.textContent = totalLibros;
+        if (statsCompraDesktop) statsCompraDesktop.textContent = `${inversionTotal.toFixed(2)} €`;
+        if (statsVentaDesktop) statsVentaDesktop.textContent = `${valorVentaTotal.toFixed(2)} €`;
+    },
+
+    // =============================================
+    // ISBN LOOKUP
+    // =============================================
+
+    async lookupISBN() {
+        const isbnInput = document.getElementById('isbn-input');
+        const isbn = isbnInput.value.trim();
+
+        if (!isbn) {
+            alert('Por favor, introduce un ISBN');
+            return;
+        }
+
+        // Mostrar loading
+        const originalValue = isbnInput.value;
+        isbnInput.value = 'Buscando...';
+        isbnInput.disabled = true;
+
         try {
-            await storage.deleteBook(id);
-            this.closeDetailModal();
-            await this.loadAndRenderBooks();
-        } catch (err) {
-            console.error('Error al eliminar:', err);
-            alert('Error al intentar eliminar el libro.');
+            // Buscar en Google Books
+            const googleBooksUrl = `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`;
+            const googleResponse = await fetch(googleBooksUrl);
+            const googleData = await googleResponse.json();
+
+            let libroData = {};
+
+            if (googleData.totalItems > 0) {
+                const book = googleData.items[0].volumeInfo;
+                libroData = {
+                    titulo: book.title || '',
+                    autores: book.authors || [],
+                    isbn: isbn,
+                    editorial: book.publisher || '',
+                    anio_publicacion: book.publishedDate ? book.publishedDate.substring(0, 4) : '',
+                    descripcion: book.description || '',
+                    portada_url: book.imageLinks?.thumbnail || book.imageLinks?.smallThumbnail || ''
+                };
+            } else {
+                // Si no se encuentra en Google Books, probar Open Library
+                const openLibraryUrl = `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`;
+                const openLibraryResponse = await fetch(openLibraryUrl);
+                const openLibraryData = await openLibraryResponse.json();
+
+                const olKey = `ISBN:${isbn}`;
+                if (openLibraryData[olKey]) {
+                    const book = openLibraryData[olKey];
+                    libroData = {
+                        titulo: book.title || '',
+                        autores: book.authors ? book.authors.map(a => a.name) : [],
+                        isbn: isbn,
+                        editorial: book.publishers ? book.publishers[0] : '',
+                        anio_publicacion: book.publish_date ? book.publish_date.substring(0, 4) : '',
+                        descripcion: book.notes ? book.notes.value : '',
+                        portada_url: book.cover ? book.cover.medium : book.cover?.small || ''
+                    };
+                }
+            }
+
+            isbnInput.value = originalValue;
+            isbnInput.disabled = false;
+
+            if (Object.keys(libroData).length > 0) {
+                // Abrir formulario manual con datos pre-cargados
+                this.showAddBookModal('manual');
+
+                // Rellenar formulario
+                document.getElementById('form-isbn').value = libroData.isbn || isbn;
+                document.getElementById('form-titulo').value = libroData.titulo || '';
+                document.getElementById('form-autor').value = libroData.autores?.join(', ') || '';
+                document.getElementById('form-editorial').value = libroData.editorial || '';
+                document.getElementById('form-anio').value = libroData.anio_publicacion || '';
+                document.getElementById('form-descripcion').value = libroData.descripcion || '';
+                document.getElementById('form-portada-url').value = libroData.portada_url || '';
+            } else {
+                alert('No se encontraron informacion para este ISBN. Puedes anadir el libro manualmente.');
+            }
+
+        } catch (error) {
+            isbnInput.value = originalValue;
+            isbnInput.disabled = false;
+            console.error('Error al buscar ISBN:', error);
+            alert('Error al buscar el ISBN. Intentalo de nuevo.');
         }
     },
 
-    fullscreenPhoto(base64Data) {
-        const viewer = document.createElement('div');
-        viewer.className = 'fixed inset-0 bg-black/95 z-[60] flex items-center justify-center p-4 cursor-zoom-out';
-        viewer.onclick = () => viewer.remove();
+    // =============================================
+    // FOTOS
+    // =============================================
 
-        const img = document.createElement('img');
-        img.src = base64Data;
-        img.className = 'max-w-full max-h-full rounded-lg shadow-2xl object-contain';
+    handleRealPhotos(event) {
+        const files = Array.from(event.target.files);
+        if (files.length === 0) return;
 
-        viewer.appendChild(img);
-        document.body.appendChild(viewer);
+        const preview = document.getElementById('form-photos-preview');
+        if (!preview) return;
+
+        // Mostrar previsualizacion
+        files.forEach(file => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const imgContainer = document.createElement('div');
+                imgContainer.className = 'relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200';
+
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                img.className = 'w-full h-full object-cover';
+
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs';
+                removeBtn.innerHTML = '<i data-lucide="x" class="w-3 h-3"></i>';
+                removeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    imgContainer.remove();
+                    // Actualizar el input file para que no envie esta foto
+                    const newFiles = Array.from(event.target.files).filter(f => f !== file);
+                    const dataTransfer = new DataTransfer();
+                    newFiles.forEach(f => dataTransfer.items.add(f));
+                    event.target.files = dataTransfer.files;
+                };
+
+                imgContainer.appendChild(img);
+                imgContainer.appendChild(removeBtn);
+                preview.appendChild(imgContainer);
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Resetear el input para permitir seleccionar los mismos archivos otra vez
+        event.target.value = '';
     },
 
-    // Desplazar al inicio
+    // =============================================
+    // MODAL DE CONFIGURACION DE SUPABASE
+    // =============================================
+
+    showSupabaseConfigModal() {
+        const modal = document.getElementById('supabase-config-modal');
+        if (modal) modal.classList.remove('hidden');
+    },
+
+    closeSupabaseConfigModal() {
+        const modal = document.getElementById('supabase-config-modal');
+        if (modal) modal.classList.add('hidden');
+    },
+
+    async saveSupabaseConfig(event) {
+        if (event) event.preventDefault();
+
+        const url = document.getElementById('supabase-url-input').value.trim();
+        const anonKey = document.getElementById('supabase-anon-key-input').value.trim();
+        const serviceKey = document.getElementById('supabase-service-key-input').value.trim();
+
+        if (!url || !anonKey) {
+            alert('URL y Clave Anonima son obligatorias');
+            return;
+        }
+
+        // Guardar en localStorage
+        localStorage.setItem('supabaseUrl', url);
+        localStorage.setItem('supabaseAnonKey', anonKey);
+
+        // Si hay service key, guardarla tambien (para registro de usuarios)
+        if (serviceKey) {
+            localStorage.setItem('supabaseServiceKey', serviceKey);
+        }
+
+        // Reiniciar cliente de Supabase
+        this.supabase = supabase.createClient(url, anonKey);
+
+        // Cerrar modal
+        this.closeSupabaseConfigModal();
+
+        // Verificar si hay usuario autenticado
+        const { data: { user } } = await this.supabase.auth.getUser();
+        if (user) {
+            this.currentUser = user;
+            await this.onUserAuthenticated(user);
+        } else {
+            this.showAuthModal();
+        }
+    },
+
+    // =============================================
+    // UTILIDADES
+    // =============================================
+
     scrollToTop() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+
+    loadConfig() {
+        // Cargar configuracion de Supabase
+        const url = localStorage.getItem('supabaseUrl');
+        const anonKey = localStorage.getItem('supabaseAnonKey');
+        const serviceKey = localStorage.getItem('supabaseServiceKey');
+
+        if (url && anonKey) {
+            this.supabase = supabase.createClient(url, anonKey);
+        }
+
+        return { url, anonKey, serviceKey };
     }
 };
+
+// Inicializar al cargar la pagina
+if (typeof window !== 'undefined') {
+    window.app = app;
+}
