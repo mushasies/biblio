@@ -12,6 +12,8 @@
 
 let supabaseClient = null;
 
+console.log('auth.js - Iniciando carga');
+
 const auth = {
     // Datos del usuario actualmente logueado
     currentSession: null,
@@ -245,3 +247,4 @@ const auth = {
 
 // Exponer el objeto auth globalmente
 window.auth = auth;
+console.log('auth.js - Objeto auth expuesto globalmente:', typeof window.auth);

@@ -40,6 +40,16 @@ const app = {
             // Inicializar Supabase
             await this.initSupabase();
             
+            // Verificar que auth esté disponible
+            if (typeof auth === 'undefined' || auth === null) {
+                console.error('ERROR: auth no está definido. Esperando...');
+                await new Promise(resolve => setTimeout(resolve, 500));
+                if (typeof auth === 'undefined' || auth === null) {
+                    throw new Error('auth no está disponible después de esperar');
+                }
+            }
+            console.log('app.init() - auth disponible:', typeof auth);
+            
             // Inicializar auth (esto también inicializa el cliente de Supabase en auth.js)
             await auth.init();
             
@@ -103,18 +113,10 @@ const app = {
     },
 
     setupAuthListeners() {
-        this.supabase.auth.onAuthStateChange((event, session) => {
-            if (event === 'SIGNED_IN') {
-                this.currentUser = session.user;
-                this.onUserAuthenticated(session.user);
-            } else if (event === 'SIGNED_OUT') {
-                this.currentUser = null;
-                this.bibliotecas = [];
-                this.libros = [];
-                this.currentBibliotecaId = null;
-                this.updateUIForAuthState();
-            }
-        });
+        // Como estamos usando el sistema de autenticación personalizado (auth.js),
+        // no necesitamos escuchar los eventos nativos de Supabase auth
+        // Los eventos de auth ya se manejan a través del listener 'authChange'
+        console.log('setupAuthListeners() - Usando sistema de autenticación personalizado');
     },
 
     // =============================================
@@ -896,11 +898,16 @@ const app = {
         this.closeSupabaseConfigModal();
 
         // Verificar si hay usuario autenticado (usar auth.getUser() en lugar del nativo)
-        const user = auth.getUser();
-        if (user) {
-            this.currentUser = user;
-            await this.onUserAuthenticated(user);
+        if (typeof auth !== 'undefined' && auth && auth.getUser) {
+            const user = auth.getUser();
+            if (user) {
+                this.currentUser = user;
+                await this.onUserAuthenticated(user);
+            } else {
+                this.showAuthModal();
+            }
         } else {
+            console.error('auth no está disponible en saveSupabaseConfig');
             this.showAuthModal();
         }
     },
