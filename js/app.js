@@ -219,6 +219,92 @@ const app = {
         if (authModal) authModal.classList.add('hidden');
     },
 
+    // Manejadores de submit para formularios de autenticación
+    async handleLoginSubmit(event) {
+        event.preventDefault();
+        
+        const email = document.getElementById('login-email').value.trim();
+        const password = document.getElementById('login-password').value;
+        
+        if (!email || !password) {
+            alert('Por favor, completa todos los campos');
+            return;
+        }
+        
+        try {
+            if (typeof auth === 'undefined' || !auth.signIn) {
+                alert('Error: Sistema de autenticación no disponible');
+                return;
+            }
+            
+            const user = await auth.signIn(email, password);
+            this.currentUser = user;
+            
+            // Asegurar que app.supabase esté disponible
+            if (!this.supabase && typeof auth !== 'undefined' && auth.getClient) {
+                this.supabase = auth.getClient();
+            }
+            
+            await this.onUserAuthenticated(user);
+            this.closeAuthModal();
+            this.updateUIForAuthState();
+            
+            // Disparar evento authChange para consistencia
+            document.dispatchEvent(new CustomEvent('authChange', { 
+                detail: { user: user, session: user } 
+            }));
+            
+        } catch (error) {
+            console.error('Error en login:', error.message);
+            alert('Error al iniciar sesión: ' + error.message);
+        }
+    },
+
+    async handleSignupSubmit(event) {
+        event.preventDefault();
+        
+        const email = document.getElementById('signup-email').value.trim();
+        const password = document.getElementById('signup-password').value;
+        
+        if (!email || !password) {
+            alert('Por favor, completa todos los campos');
+            return;
+        }
+        
+        if (password.length < 6) {
+            alert('La contraseña debe tener al menos 6 caracteres');
+            return;
+        }
+        
+        try {
+            if (typeof auth === 'undefined' || !auth.signUp) {
+                alert('Error: Sistema de autenticación no disponible');
+                return;
+            }
+            
+            const user = await auth.signUp(email, password);
+            this.currentUser = user;
+            
+            // Asegurar que app.supabase esté disponible
+            if (!this.supabase && typeof auth !== 'undefined' && auth.getClient) {
+                this.supabase = auth.getClient();
+            }
+            
+            await this.onUserAuthenticated(user);
+            this.closeAuthModal();
+            this.updateUIForAuthState();
+            
+            // Disparar evento authChange para consistencia
+            document.dispatchEvent(new CustomEvent('authChange', { 
+                detail: { user: user, session: user } 
+            }));
+            
+        } catch (error) {
+            console.error('Error en registro:', error.message);
+            alert('Error al registrar usuario: ' + error.message);
+        }
+    },
+
     switchAuthTab(tab) {
         const loginBtn = document.getElementById('auth-tab-btn-login');
         const signupBtn = document.getElementById('auth-tab-btn-signup');

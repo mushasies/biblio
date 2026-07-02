@@ -525,7 +525,7 @@ Guardar Libro
 Para habilitar la sincronizacion en la nube, introduce las credenciales de tu proyecto Supabase:
 <br><strong class="text-primary-600">La SERVICE KEY es obligatoria para registrar usuarios.</strong>
 </p>
-<form id="supabase-config-form" class="space-y-4">
+<form id="supabase-config-form" class="space-y-4" onsubmit="app.saveSupabaseConfig(event)">
 <div>
 <label class="block text-xs font-bold text-slate-500 mb-1">URL del Proyecto</label>
 <input type="text" id="supabase-url-input" placeholder="https://tu-proyecto.supabase.co" 
