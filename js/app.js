@@ -1141,12 +1141,36 @@ const app = {
             localStorage.setItem('supabaseServiceKey', serviceKey);
         }
 
+        // Asegurar que window.supabase esté disponible
+        if (typeof window.supabase === 'undefined' || typeof window.supabase.createClient !== 'function') {
+            // Esperar a que window.supabase esté disponible
+            await new Promise((resolve) => {
+                const interval = setInterval(() => {
+                    if (typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function') {
+                        clearInterval(interval);
+                        resolve();
+                    }
+                }, 100);
+                setTimeout(() => {
+                    clearInterval(interval);
+                    resolve();
+                }, 5000);
+            });
+        }
+        
         // Reiniciar cliente de Supabase
-        this.supabase = supabase.createClient(url, anonKey);
-
-        // También actualizar auth
-        if (typeof auth !== 'undefined' && auth.initSupabase) {
-            await auth.initSupabase();
+        if (typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function') {
+            this.supabase = window.supabase.createClient(url, serviceKey || anonKey);
+            
+            // Recrear el cliente de auth completamente usando el método dedicado
+            if (typeof auth !== 'undefined' && auth.reinitializeClient) {
+                await auth.reinitializeClient();
+                
+                // Asegurar que app.supabase use el cliente de auth si está disponible
+                if (auth.getClient()) {
+                    this.supabase = auth.getClient();
+                }
+            }
         }
 
         // Cerrar modal

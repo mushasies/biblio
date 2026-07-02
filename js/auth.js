@@ -10,11 +10,11 @@
  * incluso con RLS habilitado. NO la expongas en producción.
  */
 
-let supabaseClient = null;
-
 console.log('auth.js - Iniciando carga');
 
 const auth = {
+    // Variable interna para almacenar el cliente Supabase
+    _supabaseClient: null,
     // Datos del usuario actualmente logueado
     currentSession: null,
     
@@ -93,11 +93,11 @@ const auth = {
                 throw new Error('La librería Supabase no se cargó correctamente. Verifica tu conexión a internet y recarga la página.');
             }
             
-            supabaseClient = window.supabase.createClient(supabaseUrl, keyToUse);
+            this._supabaseClient = window.supabase.createClient(supabaseUrl, keyToUse);
             console.log('Supabase client inicializado con', supabaseServiceKey ? 'SERVICE KEY' : 'ANON KEY');
             
             // Inicializar el módulo de usuarios con el cliente Supabase
-            users.init(supabaseClient);
+            users.init(this._supabaseClient);
             
             // Verificar si hay una sesión guardada en localStorage
             const savedUser = localStorage.getItem('biblio_user');
@@ -131,7 +131,7 @@ const auth = {
     
     // Iniciar sesión con email y contraseña (usando nuestro sistema)
     async signIn(email, password) {
-        if (!supabaseClient) throw new Error('Supabase no inicializado.');
+        if (!this._supabaseClient) throw new Error('Supabase no inicializado.');
         
         const result = await users.login(email, password);
         
@@ -149,7 +149,7 @@ const auth = {
     
     // Registrar nuevo usuario (usando nuestro sistema)
     async signUp(email, password) {
-        if (!supabaseClient) throw new Error('Supabase no inicializado.');
+        if (!this._supabaseClient) throw new Error('Supabase no inicializado.');
         
         // Verificar si estamos usando ANON KEY sin SERVICE KEY
         const supabaseServiceKey = localStorage.getItem('supabaseServiceKey');
@@ -192,6 +192,14 @@ const auth = {
         await this.initSupabase();
     },
     
+    // Reinicializar el cliente Supabase con nuevas credenciales
+    async reinitializeClient() {
+        // Limpiar el cliente actual
+        this._supabaseClient = null;
+        // Re-inicializar con las nuevas credenciales de localStorage
+        await this.initSupabase();
+    },
+    
     // Obtener la sesión actual
     getSession() {
         return this.currentSession;
@@ -219,14 +227,14 @@ const auth = {
     
     // Función para realizar consultas a la base de datos de Supabase
     async from(tableName) {
-        if (!supabaseClient) throw new Error('Supabase no inicializado o no configurado.');
+        if (!this._supabaseClient) throw new Error('Supabase no inicializado o no configurado.');
         if (!this.getUser()) throw new Error('Usuario no autenticado.');
-        return supabaseClient.from(tableName);
+        return this._supabaseClient.from(tableName);
     },
     
     // Obtener el cliente Supabase (para usar en storage.js)
     getClient() {
-        return supabaseClient;
+        return this._supabaseClient;
     },
     
     // --- Funciones para gestión de usuarios (delegadas a users.js) ---
