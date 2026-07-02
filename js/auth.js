@@ -28,8 +28,7 @@ const auth = {
         const supabaseServiceKey = localStorage.getItem('supabaseServiceKey');
 
         if (!supabaseUrl) {
-            console.log('Supabase no configurado. Mostrando modal de configuración.');
-            document.dispatchEvent(new CustomEvent('showSupabaseConfig'));
+            console.log('Supabase no configurado. auth.initSupabase() devuelve sin crear cliente.');
             document.dispatchEvent(new Event('supabaseReady'));
             return;
         }
@@ -46,9 +45,7 @@ const auth = {
             }
             
             if (!keyToUse) {
-                console.log('No hay clave configurada. Mostrando modal de configuración.');
-                // Disparar evento para que app.js muestre el modal
-                document.dispatchEvent(new CustomEvent('showSupabaseConfig'));
+                console.log('No hay clave configurada. auth.initSupabase() devuelve sin crear cliente.');
                 document.dispatchEvent(new Event('supabaseReady'));
                 return;
             }
