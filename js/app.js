@@ -19,7 +19,8 @@ const app = {
         try {
             // Escuchar evento para mostrar modal de configuración de Supabase
             document.addEventListener('showSupabaseConfig', () => {
-                console.log('Evento showSupabaseConfig recibido');
+                // Ocultar modal de login si está visible
+                this.closeAuthModal();
                 this.showSupabaseConfigModal();
             });
             
@@ -76,11 +77,23 @@ const app = {
                 this.currentUser = user;
                 await this.onUserAuthenticated(user);
             } else {
-                // Asegurarse de que el splash se oculta antes de mostrar el modal de auth
-                if (typeof hideSplashScreen === 'function') {
-                    hideSplashScreen();
+                // Verificar si Supabase está configurado antes de mostrar el modal de auth
+                const supabaseUrl = localStorage.getItem('supabaseUrl');
+                const supabaseAnonKey = localStorage.getItem('supabaseAnonKey');
+                
+                if (!supabaseUrl || !supabaseAnonKey) {
+                    // No hay configuración de Supabase, mostrar modal de configuración
+                    if (typeof hideSplashScreen === 'function') {
+                        hideSplashScreen();
+                    }
+                    this.showSupabaseConfigModal();
+                } else {
+                    // Supabase está configurado pero no hay usuario autenticado
+                    if (typeof hideSplashScreen === 'function') {
+                        hideSplashScreen();
+                    }
+                    this.showAuthModal();
                 }
-                this.showAuthModal();
             }
 
         } catch (error) {
