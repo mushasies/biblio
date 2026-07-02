@@ -19,12 +19,17 @@ const app = {
         try {
             // Escuchar evento para mostrar modal de configuración de Supabase
             document.addEventListener('showSupabaseConfig', () => {
-                // Ocultar modal de login si está visible
+                // Ocultar todos los modales primero
                 this.closeAuthModal();
+                this.closeSupabaseConfigModal();
+                this.closeAddBookModal();
+                this.closeDetailModal();
+                // Luego mostrar el de configuración de Supabase
                 this.showSupabaseConfigModal();
             });
             
             // Escuchar eventos de cambio de autenticación desde auth.js
+            // SOLAMENTE para cuando hay usuario (login/registro exitoso)
             document.addEventListener('authChange', async (e) => {
                 console.log('Evento authChange recibido:', e.detail);
                 if (e.detail && e.detail.user) {
@@ -33,14 +38,8 @@ const app = {
                     console.log('Usuario detectado, ejecutando onUserAuthenticated');
                     await this.onUserAuthenticated(e.detail.user);
                 } else {
-                    console.log('authChange: Ningún usuario, mostrando modal de auth. Current user:', this.currentUser);
-                    // No mostrar modal si ya estamos en el proceso de autenticación
-                    if (!this.currentUser) {
-                        this.currentUser = null;
-                        this.showAuthModal();
-                    } else {
-                        console.log('authChange: No se muestra modal porque currentUser ya está establecido');
-                    }
+                    // NO mostrar modal de auth aquí - el flujo se controla en init()
+                    console.log('authChange: Ningún usuario. Flujos de modales controlados manualmente.');
                 }
             });
             
@@ -58,6 +57,7 @@ const app = {
             console.log('app.init() - auth disponible:', typeof auth);
             
             // Inicializar auth (esto también inicializa el cliente de Supabase en auth.js)
+            // NOTA: auth.init() puede disparar el evento showSupabaseConfig si no hay URL
             await auth.init();
             
             // Usar el cliente de auth si está disponible
@@ -71,29 +71,45 @@ const app = {
             // Cargar configuracion guardada
             await this.loadConfig();
 
-            // Verificar si hay usuario autenticado (usando el sistema de auth personalizado)
+            // FLUJO DE INICIO CONTROLADO: Primero Supabase, luego autenticación
+            const supabaseUrl = localStorage.getItem('supabaseUrl');
+            const supabaseAnonKey = localStorage.getItem('supabaseAnonKey');
             const user = auth.getUser();
+            
+            console.log('app.init() - Estado: Supabase URL=', !!supabaseUrl, 'AnonKey=', !!supabaseAnonKey, 'User=', !!user);
+            
+            // Prioridad 1: Si no hay configuración de Supabase, mostrar modal de configuración
+            if (!supabaseUrl || !supabaseAnonKey) {
+                console.log('app.init() - No hay configuración de Supabase, mostrando modal de configuración');
+                if (typeof hideSplashScreen === 'function') {
+                    hideSplashScreen();
+                }
+                // Asegurar que todos los modales están cerrados
+                this.closeAuthModal();
+                this.closeSupabaseConfigModal();
+                this.closeAddBookModal();
+                this.closeDetailModal();
+                this.showSupabaseConfigModal();
+                return; // Salir aquí - no continuar
+            }
+            
+            // Prioridad 2: Si hay usuario autenticado
             if (user) {
+                console.log('app.init() - Usuario autenticado encontrado, inicializando...');
                 this.currentUser = user;
                 await this.onUserAuthenticated(user);
             } else {
-                // Verificar si Supabase está configurado antes de mostrar el modal de auth
-                const supabaseUrl = localStorage.getItem('supabaseUrl');
-                const supabaseAnonKey = localStorage.getItem('supabaseAnonKey');
-                
-                if (!supabaseUrl || !supabaseAnonKey) {
-                    // No hay configuración de Supabase, mostrar modal de configuración
-                    if (typeof hideSplashScreen === 'function') {
-                        hideSplashScreen();
-                    }
-                    this.showSupabaseConfigModal();
-                } else {
-                    // Supabase está configurado pero no hay usuario autenticado
-                    if (typeof hideSplashScreen === 'function') {
-                        hideSplashScreen();
-                    }
-                    this.showAuthModal();
+                // Prioridad 3: Hay Supabase configurado pero no usuario - mostrar modal de auth
+                console.log('app.init() - Supabase configurado pero no hay usuario, mostrando modal de auth');
+                if (typeof hideSplashScreen === 'function') {
+                    hideSplashScreen();
                 }
+                // Asegurar que todos los modales están cerrados
+                this.closeAuthModal();
+                this.closeSupabaseConfigModal();
+                this.closeAddBookModal();
+                this.closeDetailModal();
+                this.showAuthModal();
             }
 
         } catch (error) {
@@ -1176,19 +1192,33 @@ const app = {
         // Cerrar modal
         this.closeSupabaseConfigModal();
 
-        // Verificar si hay usuario autenticado (usar auth.getUser() en lugar del nativo)
-        if (typeof auth !== 'undefined' && auth && auth.getUser) {
-            const user = auth.getUser();
-            if (user) {
-                this.currentUser = user;
-                await this.onUserAuthenticated(user);
-            } else {
-                this.showAuthModal();
+        // NOTA: Después de configurar Supabase, NO intentar autenticar automáticamente
+        // porque el usuario quiere configurar primero y luego iniciar sesión manualmente
+        // Re-inicializar auth para que use las nuevas credenciales
+        if (typeof auth !== 'undefined' && auth && auth.reinitializeClient) {
+            try {
+                await auth.reinitializeClient();
+                // Actualizar app.supabase
+                if (auth.getClient()) {
+                    this.supabase = auth.getClient();
+                }
+            } catch (error) {
+                console.error('Error al reinicializar auth después de guardar configuración:', error);
             }
-        } else {
-            console.error('auth no está disponible en saveSupabaseConfig');
-            this.showAuthModal();
         }
+        
+        // Mostrar modal de autenticación para que el usuario inicie sesión
+        // con las nuevas credenciales de Supabase
+        if (typeof hideSplashScreen === 'function') {
+            hideSplashScreen();
+        }
+        this.closeAuthModal();
+        this.closeSupabaseConfigModal();
+        this.closeAddBookModal();
+        this.closeDetailModal();
+        this.showAuthModal();
+        
+        alert('Configuración de Supabase guardada correctamente. Por favor, inicia sesión.');
     },
 
     // =============================================
