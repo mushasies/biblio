@@ -20,7 +20,7 @@ const auth = {
     
     /**
      * Inicializa el cliente Supabase
-     * Usa la anon key para conexión normal, pero la service key para acceder a users
+     * Usa la anon key para conexión normal, pero la service key para acceder a perfiles
      */
     async initSupabase() {
         const supabaseUrl = localStorage.getItem('supabaseUrl');
@@ -34,14 +34,14 @@ const auth = {
         }
 
         try {
-            // Usar service key si está disponible (para acceder a la tabla users)
+            // Usar service key si está disponible (para acceder a la tabla perfiles)
             // de lo contrario, usar anon key (pero esto puede fallar con RLS)
             const keyToUse = supabaseServiceKey || supabaseAnonKey;
             console.log('Usando clave:', supabaseServiceKey ? 'SERVICE KEY' : 'ANON KEY');
             
             // Advertir si solo se usa anon key (puede fallar con RLS)
             if (!supabaseServiceKey && supabaseAnonKey) {
-              console.warn('ADVERTENCIA: Usando ANON KEY. Para registrar usuarios, necesitas la SERVICE KEY o desactivar RLS en la tabla users.');
+              console.warn('ADVERTENCIA: Usando ANON KEY. Para registrar usuarios, necesitas la SERVICE KEY o desactivar RLS en la tabla perfiles.');
             }
             
             if (!keyToUse) {
@@ -152,7 +152,7 @@ const auth = {
         const supabaseServiceKey = localStorage.getItem('supabaseServiceKey');
         const supabaseAnonKey = localStorage.getItem('supabaseAnonKey');
         if (supabaseAnonKey && !supabaseServiceKey) {
-          console.warn('ADVERTENCIA: Intentando registrar con ANON KEY. Esto fallará si RLS está activado en la tabla users.');
+          console.warn('ADVERTENCIA: Intentando registrar con ANON KEY. Esto fallará si RLS está activado en la tabla perfiles.');
         }
         
         const result = await users.register(email, password);

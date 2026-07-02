@@ -47,7 +47,7 @@ const users = {
       // NOTE: El trigger 'trg_first_user' en la BD asignará role='admin' al primer usuario
       console.log('Intentando registrar usuario con email:', email);
       const { data, error } = await this.supabaseClient
-        .from('users')
+        .from('perfiles')
         .insert([
           { email, password_hash: passwordHash }
         ])
@@ -64,7 +64,7 @@ const users = {
         
         // Mensaje de ayuda para errores comunes
         if (errorMsg.includes('RLS') || errorMsg.includes('permission') || errorMsg.includes('denied')) {
-          return { success: false, error: 'Error de permisos. Asegúrate de: 1) Usar la SERVICE KEY (no la anon key), 2) Desactivar RLS en la tabla users, o 3) Configurar políticas RLS para permitir INSERT.' };
+          return { success: false, error: 'Error de permisos. Asegúrate de: 1) Usar la SERVICE KEY (no la anon key), 2) Desactivar RLS en la tabla perfiles, o 3) Configurar políticas RLS para permitir INSERT.' };
         }
         
         return { success: false, error: errorMsg };
@@ -98,7 +98,7 @@ const users = {
       }
       // Añadir sugerencia para errores de permisos
       if (errorMsg.includes('permission') || errorMsg.includes('denied') || errorMsg.includes('RLS')) {
-        errorMsg = 'Error de permisos en la base de datos. SOLUCIÓN: Usa la SERVICE KEY de Supabase (no la anon key) o desactiva RLS en la tabla users.';
+        errorMsg = 'Error de permisos en la base de datos. SOLUCIÓN: Usa la SERVICE KEY de Supabase (no la anon key) o desactiva RLS en la tabla perfiles.';
       }
       return { success: false, error: errorMsg };
     }
@@ -115,7 +115,7 @@ const users = {
     try {
       // Buscar usuario por email
       const { data, error } = await this.supabaseClient
-        .from('users')
+        .from('perfiles')
         .select('id, email, password_hash, role')
         .eq('email', email)
         .limit(1);
@@ -205,7 +205,7 @@ const users = {
     
     try {
       const { data, error } = await this.supabaseClient
-        .from('users')
+        .from('perfiles')
         .select('id, email, role, created_at')
         .order('created_at', { ascending: false });
       
@@ -239,7 +239,7 @@ const users = {
     
     try {
       const { error } = await this.supabaseClient
-        .from('users')
+        .from('perfiles')
         .update({ role: newRole })
         .eq('id', userId);
       
@@ -268,7 +268,7 @@ const users = {
     
     try {
       const { error } = await this.supabaseClient
-        .from('users')
+        .from('perfiles')
         .delete()
         .eq('id', userId);
       
