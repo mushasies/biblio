@@ -131,17 +131,21 @@ const auth = {
     
     // Iniciar sesión con email y contraseña (usando nuestro sistema)
     async signIn(email, password) {
+        console.log('auth.signIn: Iniciando sesión con email:', email);
         if (!supabaseClient) throw new Error('Supabase no inicializado.');
         
         const result = await users.login(email, password);
+        console.log('auth.signIn: Resultado de users.login:', result);
         
         if (!result.success) {
+            console.log('auth.signIn: Login fallido:', result.error);
             throw new Error(result.error || 'Error al iniciar sesión');
         }
         
         // Guardar sesión
         this.currentSession = result.user;
         users.currentUser = result.user;
+        console.log('auth.signIn: Guardando usuario en localStorage:', result.user);
         localStorage.setItem('biblio_user', JSON.stringify(result.user));
         
         console.log('Sesión iniciada con éxito:', result.user);

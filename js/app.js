@@ -27,13 +27,19 @@ const app = {
             document.addEventListener('authChange', async (e) => {
                 console.log('Evento authChange recibido:', e.detail);
                 if (e.detail && e.detail.user) {
+                    console.log('authChange: Usuario autenticado detectado');
                     this.currentUser = e.detail.user;
                     console.log('Usuario detectado, ejecutando onUserAuthenticated');
                     await this.onUserAuthenticated(e.detail.user);
                 } else {
-                    console.log('Ningún usuario, mostrando modal de auth');
-                    this.currentUser = null;
-                    this.showAuthModal();
+                    console.log('authChange: Ningún usuario, mostrando modal de auth. Current user:', this.currentUser);
+                    // No mostrar modal si ya estamos en el proceso de autenticación
+                    if (!this.currentUser) {
+                        this.currentUser = null;
+                        this.showAuthModal();
+                    } else {
+                        console.log('authChange: No se muestra modal porque currentUser ya está establecido');
+                    }
                 }
             });
             
@@ -124,42 +130,55 @@ const app = {
     // =============================================
 
     async onUserAuthenticated(user) {
+        console.log('onUserAuthenticated llamado con usuario:', user);
         this.currentUser = user;
 
         // Asegurar que app.supabase esté disponible usando el cliente de auth si es necesario
         if (!this.supabase && typeof auth !== 'undefined' && auth.getClient) {
             this.supabase = auth.getClient();
+            console.log('app.supabase obtenido de auth.getClient()');
         }
+        console.log('app.supabase disponible:', !!this.supabase);
+        console.log('app.currentUser establecido:', this.currentUser);
 
         // Obtener perfil del usuario (proteger contra errores si no hay tabla de perfiles)
         let perfil = null;
         try {
             const perfilResult = await obtenerPerfil();
             perfil = perfilResult.data;
+            console.log('Perfil obtenido:', perfil);
         } catch (error) {
             console.warn('No se pudo obtener perfil:', error.message);
             // Continuar sin perfil si hay error
         }
         
         this.isAdmin = perfil?.es_admin || false;
+        console.log('isAdmin:', this.isAdmin);
 
         // Cargar bibliotecas
         await this.cargarBibliotecas();
+        console.log('Bibliotecas cargadas:', this.bibliotecas);
 
         // Cargar libros de la primera biblioteca
         if (this.bibliotecas.length > 0) {
             this.currentBibliotecaId = this.bibliotecas[0].id;
             await this.cargarLibros();
+            console.log('Libros cargados:', this.libros.length);
+        } else {
+            console.log('No hay bibliotecas para cargar libros');
         }
 
         this.updateUIForAuthState();
+        console.log('UI actualizada para estado de autenticación');
     },
 
     updateUIForAuthState() {
         const appContent = document.getElementById('app-content');
         const authModal = document.getElementById('auth-modal');
 
-        console.log('updateUIForAuthState - currentUser:', this.currentUser, 'appContent:', appContent, 'authModal:', authModal);
+        console.log('updateUIForAuthState - currentUser:', this.currentUser, 'appContent:', !!appContent, 'authModal:', !!authModal);
+        console.log('app-content classList antes:', appContent?.classList.value);
+        console.log('auth-modal classList antes:', authModal?.classList.value);
 
         if (this.currentUser) {
             // Usuario autenticado
@@ -182,6 +201,9 @@ const app = {
                 console.log('Mostrando auth-modal, hidden removido');
             }
         }
+        
+        console.log('app-content classList después:', appContent?.classList.value);
+        console.log('auth-modal classList después:', authModal?.classList.value);
     },
 
     showAuthModal(tab = 'login') {
@@ -223,12 +245,15 @@ const app = {
     // Manejadores de submit para formularios de autenticación
     async handleLoginSubmit(event) {
         event.preventDefault();
-        console.log('Manejo de submit de login');
+        console.log('handleLoginSubmit: Manejo de submit de login');
         
         const email = document.getElementById('login-email').value.trim();
         const password = document.getElementById('login-password').value;
         
+        console.log('handleLoginSubmit: Email a autenticar:', email);
+        
         if (!email || !password) {
+            console.log('handleLoginSubmit: Campos incompletos');
             alert('Por favor, completa todos los campos');
             return;
         }
@@ -236,27 +261,44 @@ const app = {
         try {
             // Verificar que auth esté disponible
             if (typeof auth === 'undefined' || !auth.signIn) {
-                console.error('auth no está disponible o no tiene método signIn');
+                console.error('handleLoginSubmit: auth no está disponible o no tiene método signIn');
                 alert('Error: Sistema de autenticación no disponible');
                 return;
             }
             
-            console.log('Intentando iniciar sesión con:', email);
+            console.log('handleLoginSubmit: Intentando iniciar sesión...');
             const user = await auth.signIn(email, password);
-            console.log('Login exitoso:', user);
+            console.log('handleLoginSubmit: Login exitoso, usuario:', user);
             
-            // Cerrar modal de auth
-            this.closeAuthModal();
-            
-            // Actualizar usuario actual y llamar directamente a onUserAuthenticated
+            // Actualizar usuario actual
             this.currentUser = user;
-            await this.onUserAuthenticated(user);
+            console.log('handleLoginSubmit: currentUser establecido');
             
-            // También actualizar la UI
+            // Asegurar que el cliente Supabase esté disponible
+            if (!this.supabase && typeof auth !== 'undefined' && auth.getClient) {
+                this.supabase = auth.getClient();
+                console.log('handleLoginSubmit: app.supabase obtenido de auth');
+            }
+            
+            // Llamar a onUserAuthenticated para cargar datos
+            console.log('handleLoginSubmit: Llamando a onUserAuthenticated');
+            await this.onUserAuthenticated(user);
+            console.log('handleLoginSubmit: onUserAuthenticated completado');
+            
+            // Cerrar modal de auth y actualizar UI
+            console.log('handleLoginSubmit: Cerrando modal y actualizando UI');
+            this.closeAuthModal();
             this.updateUIForAuthState();
             
+            // Disparar evento authChange para consistencia
+            console.log('handleLoginSubmit: Disparando evento authChange');
+            document.dispatchEvent(new CustomEvent('authChange', { 
+                detail: { user: user, session: user } 
+            }));
+            console.log('handleLoginSubmit: Evento authChange disparado');
+            
         } catch (error) {
-            console.error('Error en login:', error.message);
+            console.error('handleLoginSubmit: Error en login:', error.message);
             alert('Error al iniciar sesión: ' + error.message);
         }
     },
@@ -290,15 +332,25 @@ const app = {
             const user = await auth.signUp(email, password);
             console.log('Registro exitoso:', user);
             
-            // Cerrar modal de auth
-            this.closeAuthModal();
-            
-            // Actualizar usuario actual y llamar directamente a onUserAuthenticated
+            // Actualizar usuario actual
             this.currentUser = user;
+            
+            // Asegurar que el cliente Supabase esté disponible
+            if (!this.supabase && typeof auth !== 'undefined' && auth.getClient) {
+                this.supabase = auth.getClient();
+            }
+            
+            // Llamar a onUserAuthenticated para cargar datos
             await this.onUserAuthenticated(user);
             
-            // También actualizar la UI
+            // Cerrar modal de auth y actualizar UI
+            this.closeAuthModal();
             this.updateUIForAuthState();
+            
+            // Disparar evento authChange para consistencia
+            document.dispatchEvent(new CustomEvent('authChange', { 
+                detail: { user: user, session: user } 
+            }));
             
         } catch (error) {
             console.error('Error en registro:', error.message);
@@ -311,12 +363,17 @@ const app = {
     // =============================================
 
     async cargarBibliotecas() {
+        console.log('cargarBibliotecas: Iniciando carga de bibliotecas');
+        console.log('cargarBibliotecas: app.supabase disponible:', !!this.supabase);
+        console.log('cargarBibliotecas: app.currentUser:', this.currentUser);
+        
         const { data, error } = await obtenerBibliotecas();
         if (error) {
-            console.error('Error al cargar bibliotecas:', error);
+            console.error('cargarBibliotecas: Error al cargar bibliotecas:', error);
             return;
         }
-        this.bibliotecas = data;
+        this.bibliotecas = data || [];
+        console.log('cargarBibliotecas: Bibliotecas cargadas:', this.bibliotecas.length);
         this.actualizarSelectBiblioteca();
     },
 

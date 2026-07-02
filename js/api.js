@@ -30,15 +30,28 @@ async function crearBiblioteca(nombre, descripcion = '') {
 
 async function obtenerBibliotecas() {
     const userId = app.currentUser?.id;
-    if (!userId) return { data: [], error: null };
+    console.log('obtenerBibliotecas: userId obtenido:', userId);
+    if (!userId) {
+        console.log('obtenerBibliotecas: No hay userId, devolviendo datos vacíos');
+        return { data: [], error: null };
+    }
 
-    const { data, error } = await app.supabase
-        .from('bibliotecas')
-        .select('*')
-        .eq('user_id', userId)
-        .order('nombre', { ascending: true });
+    console.log('obtenerBibliotecas: Buscando bibliotecas para userId:', userId);
+    console.log('obtenerBibliotecas: app.supabase disponible:', !!app.supabase);
+    
+    try {
+        const { data, error } = await app.supabase
+            .from('bibliotecas')
+            .select('*')
+            .eq('user_id', userId)
+            .order('nombre', { ascending: true });
 
-    return { data: data || [], error };
+        console.log('obtenerBibliotecas: Resultado:', data?.length || 0, 'bibliotecas, error:', error);
+        return { data: data || [], error };
+    } catch (error) {
+        console.error('obtenerBibliotecas: Excepción:', error);
+        return { data: [], error: error };
+    }
 }
 
 async function eliminarBiblioteca(bibliotecaId) {

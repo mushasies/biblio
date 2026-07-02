@@ -111,6 +111,7 @@ const users = {
    * @returns {Promise<{success: boolean, user?: object, error?: string}>}
    */
   async login(email, password) {
+    console.log('users.login: Iniciando login para email:', email);
     try {
       // Buscar usuario por email
       const { data, error } = await this.supabaseClient
@@ -120,20 +121,24 @@ const users = {
         .limit(1);
       
       if (error) {
-        console.error('Login error:', error);
+        console.error('users.login: Error al buscar usuario:', error);
         return { success: false, error: 'Error al buscar usuario' };
       }
       
       if (!data || data.length === 0) {
+        console.log('users.login: Usuario no encontrado');
         return { success: false, error: 'Usuario no encontrado' };
       }
       
       const user = data[0];
+      console.log('users.login: Usuario encontrado:', user.id, user.email);
       
       // Verificar contraseña
       const isValid = await this.verifyPassword(password, user.password_hash);
+      console.log('users.login: Contraseña válida:', isValid);
       
       if (!isValid) {
+        console.log('users.login: Contraseña incorrecta');
         return { success: false, error: 'Contraseña incorrecta' };
       }
       
@@ -144,7 +149,7 @@ const users = {
         role: user.role || 'user'
       };
       
-      console.log('Login exitoso:', this.currentUser);
+      console.log('users.login: Login exitoso, usuario devuelto:', this.currentUser);
       
       return { 
         success: true, 
@@ -152,7 +157,7 @@ const users = {
       };
       
     } catch (err) {
-      console.error('Login error:', err);
+      console.error('users.login: Error interno:', err);
       return { success: false, error: 'Error interno al iniciar sesión' };
     }
   },
