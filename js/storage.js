@@ -2,7 +2,7 @@ const storage = {
   dbName: 'BiblioDB',
   dbVersion: 3,
   storeName: 'libros',
-  libraryStoreName: 'libraries',
+  libraryStoreName: 'bibliotecas',
   db: null,
   isSupabaseEnabled: false,
   supabaseClient: null,

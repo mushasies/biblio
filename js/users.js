@@ -44,7 +44,7 @@ const users = {
       const passwordHash = await this.hashPassword(password);
       
       // Insertar usuario en Supabase
-      // NOTE: El trigger 'trg_first_user' en la BD asignará role='admin' al primer usuario
+      // NOTE: El primer usuario se creará con es_admin=true (manualmente o via trigger)
       console.log('Intentando registrar usuario con email:', email);
       const { data, error } = await this.supabaseClient
         .from('perfiles')
@@ -75,17 +75,16 @@ const users = {
       }
       
       const newUser = data[0];
-      console.log('Usuario registrado:', newUser, '(Rol:', newUser.role || 'user', ')');
+      console.log('Usuario registrado:', newUser, '(Rol:', newUser.es_admin ? 'admin' : 'user', ')');
       
       return { 
         success: true, 
         user: { 
           id: newUser.id, 
           email: newUser.email,
-          role: newUser.role || 'user'
+          role: newUser.es_admin ? 'admin' : 'user'
         } 
       };
-      
     } catch (err) {
       console.error('Register error:', err);
       // Intentar extraer más información del error
@@ -116,7 +115,7 @@ const users = {
       // Buscar usuario por email
       const { data, error } = await this.supabaseClient
         .from('perfiles')
-        .select('id, email, password_hash, role')
+        .select('id, email, password_hash, es_admin')
         .eq('email', email)
         .limit(1);
       
@@ -146,7 +145,7 @@ const users = {
       this.currentUser = {
         id: user.id,
         email: user.email,
-        role: user.role || 'user'
+        role: user.es_admin ? 'admin' : 'user'
       };
       
       console.log('users.login: Login exitoso, usuario devuelto:', this.currentUser);
@@ -206,7 +205,7 @@ const users = {
     try {
       const { data, error } = await this.supabaseClient
         .from('perfiles')
-        .select('id, email, role, created_at')
+        .select('id, email, es_admin, created_at')
         .order('created_at', { ascending: false });
       
       if (error) {
@@ -214,7 +213,13 @@ const users = {
         return { success: false, error: error.message };
       }
       
-      return { success: true, users: data };
+      // Convertir es_admin a role para mantener compatibilidad
+      const usersWithRole = data.map(user => ({
+        ...user,
+        role: user.es_admin ? 'admin' : 'user'
+      }));
+      
+      return { success: true, users: usersWithRole };
       
     } catch (err) {
       console.error('Get users error:', err);
@@ -238,9 +243,11 @@ const users = {
     }
     
     try {
+      // Convertir role a es_admin (boolean)
+      const esAdminValue = newRole === 'admin';
       const { error } = await this.supabaseClient
         .from('perfiles')
-        .update({ role: newRole })
+        .update({ es_admin: esAdminValue })
         .eq('id', userId);
       
       if (error) {
@@ -251,7 +258,7 @@ const users = {
       return { success: true };
       
     } catch (err) {
-      console.error('Update role error:', err);
+      console.error('Update es_admin error:', err);
       return { success: false, error: 'Error interno' };
     }
   },

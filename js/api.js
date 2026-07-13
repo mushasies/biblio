@@ -204,7 +204,7 @@ async function subirFotosLibro(libroId, files) {
         const fileName = `libro_${libroId}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${file.name.split('.').pop()}`;
 
         const { data: uploadData, error: uploadError } = await app.supabase.storage
-            .from('fotos-libros')
+            .from('fotos_libros')
             .upload(fileName, file);
 
         if (uploadError) {
@@ -213,7 +213,7 @@ async function subirFotosLibro(libroId, files) {
         }
 
         const { data: urlData } = app.supabase.storage
-            .from('fotos-libros')
+            .from('fotos_libros')
             .getPublicUrl(fileName);
 
         if (urlData.publicUrl) {
