@@ -471,7 +471,7 @@ const storage = {
         const supabaseBook = this.localToSupabaseBook(book);
         console.log('Guardando en Supabase:', this.storeName, supabaseBook);
         let result;
-        if (book.id !== undefined && book.id !== null && !isNaN(book.id)) {
+        if (book.id !== undefined && book.id !== null && book.id !== '' && !isNaN(book.id)) {
           console.log('Actualizando libro con id:', book.id);
           const { data, error } = await client.from(this.storeName).update(supabaseBook).eq('id', book.id).select();
           if (error) {

@@ -785,8 +785,8 @@ const app = {
         this.showAddBookModal('manual');
 
         // Rellenar formulario
-        document.getElementById('form-book-id').value = libro.id;
-        document.getElementById('form-biblioteca-id').value = libro.biblioteca_id;
+        document.getElementById('form-book-id').value = libro.id || '';
+        document.getElementById('form-biblioteca-id').value = libro.biblioteca_id || '';
         document.getElementById('form-titulo').value = libro.titulo || '';
         document.getElementById('form-autor').value = libro.autores?.join(', ') || '';
         document.getElementById('form-isbn').value = libro.isbn || '';
@@ -886,7 +886,7 @@ const app = {
         }
 
         // Guardar libro
-        const { data: libro, error } = await guardarLibro(formData);
+        const { data: libro, error } = await storage.saveBook(formData);
         if (error) {
             alert('Error al guardar el libro: ' + error.message);
             return;
