@@ -876,7 +876,7 @@ const app = {
             portada_url: document.getElementById('form-portada-url').value,
             precio_compra: parseFloat(document.getElementById('form-precio-compra').value) || 0,
             precio_venta_estimado: parseFloat(document.getElementById('form-precio-venta').value) || 0,
-            fecha_compra: document.getElementById('form-fecha-compra').value
+            fecha_compra: document.getElementById('form-fecha-compra').value || null
         };
 
         // Validar

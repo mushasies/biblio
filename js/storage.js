@@ -430,6 +430,7 @@ const storage = {
     if (!book.fechaRegistro) book.fechaRegistro = new Date().toISOString();
     book.precioCompra = book.precioCompra ? parseFloat(book.precioCompra) : null;
     book.precioVenta = book.precioVenta ? parseFloat(book.precioVenta) : null;
+    book.fecha_compra = book.fecha_compra ? book.fecha_compra : null;
     book.realPhotos = book.realPhotos || [];
     
     if (!book.user_id && auth.getUser()) book.user_id = auth.getUserId();
@@ -584,37 +585,49 @@ const storage = {
       id: bookId,
       titulo: sBook.titulo,
       autor: sBook.autor,
+      autores: sBook.autores || sBook.autor ? [sBook.autor] : [],
       isbn: sBook.isbn,
       editorial: sBook.editorial,
-      anio: sBook.anio,
+      anio: sBook.anio_publicacion || sBook.anio,
+      anio_publicacion: sBook.anio_publicacion || sBook.anio,
       descripcion: sBook.descripcion,
       portadaUrl: sBook.portada_url,
       precioCompra: sBook.precio_compra,
-      precioVenta: sBook.precio_venta,
+      precioVenta: sBook.precio_venta_estimado || sBook.precio_venta,
       fechaCompra: sBook.fecha_compra,
       realPhotos: sBook.real_photos || [],
       fechaRegistro: sBook.fecha_registro || new Date().toISOString(),
       user_id: currentUserId,
-      library_id: this.currentLibraryId
+      library_id: this.currentLibraryId,
+      biblioteca_id: sBook.biblioteca_id
     };
   },
 
   localToSupabaseBook(localBook) {
     // NO enviar user_id ni library_id a Supabase para evitar constraints
     // Estos campos solo se guardan localmente en IndexedDB
+    
+    // Convertir autores array a string si es necesario
+    let autoresValue = localBook.autores || localBook.autor || '';
+    if (Array.isArray(autoresValue)) {
+      autoresValue = autoresValue.join(', ');
+    }
+    
     const supabaseBook = {
       titulo: localBook.titulo,
       autor: localBook.autor,
+      autores: autoresValue,
       isbn: localBook.isbn,
       editorial: localBook.editorial,
-      anio: localBook.anio,
+      anio_publicacion: localBook.anio_publicacion || localBook.anio,
       descripcion: localBook.descripcion,
       portada_url: localBook.portadaUrl,
       precio_compra: localBook.precioCompra,
-      precio_venta: localBook.precioVenta,
+      precio_venta_estimado: localBook.precio_venta_estimado || localBook.precioVenta,
       fecha_compra: localBook.fechaCompra,
       real_photos: localBook.realPhotos,
-      fecha_registro: localBook.fechaRegistro || new Date().toISOString()
+      fecha_registro: localBook.fechaRegistro || new Date().toISOString(),
+      biblioteca_id: localBook.biblioteca_id || localBook.library_id
     };
     
     // Solo incluir id si existe y es un número válido (para UPDATE)

@@ -132,10 +132,19 @@ async function guardarLibro(libroData) {
     if (libroData.autores && typeof libroData.autores === 'string') {
         libroData.autores = libroData.autores.split(',').map(a => a.trim()).filter(a => a);
     }
+    // Convertir array de autores a string para Supabase
+    if (libroData.autores && Array.isArray(libroData.autores)) {
+        libroData.autores = libroData.autores.join(', ');
+    }
 
     // Convertir precios a numero
     libroData.precio_compra = parseFloat(libroData.precio_compra) || 0;
     libroData.precio_venta_estimado = parseFloat(libroData.precio_venta_estimado) || 0;
+    
+    // Convertir fecha_compra vacía a null
+    if (libroData.fecha_compra === '') {
+        libroData.fecha_compra = null;
+    }
 
     const { data, error } = await app.supabase
         .from('libros')
