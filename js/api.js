@@ -145,6 +145,11 @@ async function guardarLibro(libroData) {
     if (libroData.fecha_compra === '') {
         libroData.fecha_compra = null;
     }
+    
+    // Limpiar id vacio o invalido para que BIGINT no falle
+    if (libroData.id === '' || libroData.id === undefined || libroData.id === null) {
+        delete libroData.id;
+    }
 
     const { data, error } = await app.supabase
         .from('libros')

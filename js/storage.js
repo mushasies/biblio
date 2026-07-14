@@ -631,7 +631,7 @@ const storage = {
     };
     
     // Solo incluir id si existe y es un número válido (para UPDATE)
-    if (localBook.id !== undefined && localBook.id !== null && typeof localBook.id === 'number') {
+    if (localBook.id !== undefined && localBook.id !== null && localBook.id !== '' && !isNaN(localBook.id)) {
       supabaseBook.id = localBook.id;
     }
     

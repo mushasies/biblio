@@ -865,7 +865,7 @@ const app = {
         event.preventDefault();
 
         const formData = {
-            id: document.getElementById('form-book-id').value,
+            id: document.getElementById('form-book-id').value || undefined,
             biblioteca_id: document.getElementById('form-biblioteca-id').value || this.currentBibliotecaId,
             titulo: document.getElementById('form-titulo').value,
             autores: document.getElementById('form-autor').value.split(',').map(a => a.trim()).filter(a => a),
