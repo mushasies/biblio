@@ -739,24 +739,36 @@ async function obtenerBibliotecas() {
     if (typeof app === 'undefined' || !app.supabase || !app.currentUser) {
         // Si no hay supabase, devolver bibliotecas de IndexedDB
         try {
+            console.log('obtenerBibliotecas: Usando IndexedDB (no hay supabase o usuario)');
             const libs = await storage.getAllLibrariesIndexedDB();
             return { data: libs, error: null };
         } catch (error) {
+            console.error('obtenerBibliotecas: Error al obtener de IndexedDB:', error);
             return { data: [], error: error };
         }
     }
     
     try {
+        console.log('obtenerBibliotecas: Consultando Supabase...');
         const { data, error } = await app.supabase
             .from('bibliotecas')
             .select('*')
             .eq('user_id', app.currentUser.id);
         
         if (error) throw error;
+        console.log('obtenerBibliotecas: Obtenidas de Supabase:', data?.length || 0);
         return { data: data || [], error: null };
     } catch (error) {
-        console.error('Error obteniendo bibliotecas:', error);
-        return { data: [], error: error };
+        console.error('obtenerBibliotecas: Error consultando Supabase, probando IndexedDB:', error.message);
+        // Fallback a IndexedDB
+        try {
+            const libs = await storage.getAllLibrariesIndexedDB();
+            console.log('obtenerBibliotecas: Fallback a IndexedDB exitoso:', libs.length);
+            return { data: libs, error: null };
+        } catch (localError) {
+            console.error('obtenerBibliotecas: Error en fallback a IndexedDB:', localError);
+            return { data: [], error: error };
+        }
     }
 }
 
