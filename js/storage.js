@@ -512,9 +512,15 @@ const storage = {
       const store = transaction.objectStore(this.storeName);
       
       // Asegurar que el id es un número válido para IndexedDB
-      // Si el libro tiene id pero no es un número válido, eliminarlo para que autoIncrement lo genere
-      if (book.id === undefined || book.id === null || book.id === '' || typeof book.id !== 'number' || isNaN(book.id)) {
-        console.warn('ID inválido para IndexedDB, se generará uno nuevo:', book.id);
+      // Intentar convertir a número si es string numérico
+      if (typeof book.id === 'string' && book.id.trim() !== '') {
+        const numId = parseInt(book.id, 10);
+        if (!isNaN(numId) && numId >= 0) {
+          book.id = numId;
+        } else {
+          delete book.id;
+        }
+      } else if (book.id === undefined || book.id === null || book.id === '' || typeof book.id !== 'number' || isNaN(book.id) || book.id < 0) {
         delete book.id;
       }
       
