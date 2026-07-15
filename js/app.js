@@ -866,7 +866,7 @@ const app = {
 
         const formData = {
             id: document.getElementById('form-book-id').value || undefined,
-            biblioteca_id: document.getElementById('form-biblioteca-id').value || this.currentBibliotecaId,
+            biblioteca_id: document.getElementById('form-biblioteca-id').value || this.currentBibliotecaId || this.bibliotecas[0]?.id,
             titulo: document.getElementById('form-titulo').value,
             autores: document.getElementById('form-autor').value.split(',').map(a => a.trim()).filter(a => a),
             isbn: document.getElementById('form-isbn').value,
@@ -884,10 +884,18 @@ const app = {
             alert('El titulo es obligatorio');
             return;
         }
+        
+        // Validar que hay una biblioteca seleccionada
+        if (!formData.biblioteca_id) {
+            alert('Debe seleccionar una biblioteca');
+            return;
+        }
 
         // Guardar libro
-        const { data: libro, error } = await storage.saveBook(formData);
-        if (error) {
+        let libro;
+        try {
+            libro = await storage.saveBook(formData);
+        } catch (error) {
             alert('Error al guardar el libro: ' + error.message);
             return;
         }
@@ -902,6 +910,9 @@ const app = {
         }
 
         // Actualizar lista local
+        // Normalizar biblioteca_id para asegurar consistencia
+        const libroBibliotecaId = libro.biblioteca_id || libro.library_id || formData.biblioteca_id || formData.library_id;
+        
         if (formData.id) {
             // Actualizar libro existente
             const index = this.libros.findIndex(l => l.id === formData.id);
@@ -910,7 +921,8 @@ const app = {
             }
         } else {
             // Anadir nuevo libro
-            this.libros.unshift({ ...libro, bibliotecas: { nombre: this.bibliotecas.find(b => b.id === libro.biblioteca_id)?.nombre } });
+            const bibliotecaNombre = this.bibliotecas.find(b => b.id === libroBibliotecaId)?.nombre || 'Desconocida';
+            this.libros.unshift({ ...libro, bibliotecas: { nombre: bibliotecaNombre } });
         }
 
         this.renderizarLibros();

@@ -427,10 +427,48 @@ const storage = {
   },
 
   async saveBook(book) {
-    if (!book.fechaRegistro) book.fechaRegistro = new Date().toISOString();
-    book.precioCompra = book.precioCompra ? parseFloat(book.precioCompra) : null;
-    book.precioVenta = book.precioVenta ? parseFloat(book.precioVenta) : null;
+    // Normalizar nombres de campos para manejar tanto snake_case como camelCase
+    // Precios
+    if (book.precio_compra !== undefined) {
+      book.precioCompra = book.precio_compra;
+    }
+    if (book.precio_venta_estimado !== undefined) {
+      book.precioVenta = book.precio_venta_estimado;
+    }
+    
+    // Asegurar valores numéricos para precios
+    book.precioCompra = book.precioCompra !== undefined ? parseFloat(book.precioCompra) : (book.precio_compra ? parseFloat(book.precio_compra) : null);
+    book.precioVenta = book.precioVenta !== undefined ? parseFloat(book.precioVenta) : (book.precio_venta_estimado ? parseFloat(book.precio_venta_estimado) : null);
+    
+    // Fecha de compra
+    if (book.fecha_compra === undefined && book.fechaCompra !== undefined) {
+      book.fecha_compra = book.fechaCompra;
+    }
     book.fecha_compra = book.fecha_compra ? book.fecha_compra : null;
+    
+    // Biblioteca ID - manejar biblioteca_id y library_id
+    if (book.biblioteca_id !== undefined && !book.library_id) {
+      book.library_id = book.biblioteca_id;
+    }
+    
+    // Año de publicación
+    if (book.anio_publicacion !== undefined && !book.anio) {
+      book.anio = book.anio_publicacion;
+    }
+    
+    // Portada URL
+    if (book.portada_url !== undefined && !book.portadaUrl) {
+      book.portadaUrl = book.portada_url;
+    }
+    
+    // Autores - si viene como array, convertir a string
+    if (Array.isArray(book.autores)) {
+      book.autor = book.autores.join(', ');
+    } else if (typeof book.autores === 'string') {
+      book.autor = book.autores;
+    }
+    
+    if (!book.fechaRegistro) book.fechaRegistro = new Date().toISOString();
     book.realPhotos = book.realPhotos || [];
     
     if (!book.user_id && auth.getUser()) book.user_id = auth.getUserId();
@@ -587,25 +625,42 @@ const storage = {
     // ya que no los guardamos en Supabase para evitar problemas de constraints
     const currentUserId = auth.getUser() ? auth.getUserId() : null;
     
+    // Normalizar autores - puede ser string o array
+    let autoresArray = [];
+    if (sBook.autores) {
+      autoresArray = Array.isArray(sBook.autores) ? sBook.autores : sBook.autores.split(',').map(a => a.trim()).filter(a => a);
+    } else if (sBook.autor) {
+      autoresArray = [sBook.autor];
+    }
+    
+    // Normalizar biblioteca_id
+    const biblioteca_id = sBook.biblioteca_id || sBook.library_id;
+    
     return {
       id: bookId,
       titulo: sBook.titulo,
       autor: sBook.autor,
-      autores: sBook.autores || sBook.autor ? [sBook.autor] : [],
+      autores: autoresArray,
       isbn: sBook.isbn,
       editorial: sBook.editorial,
       anio: sBook.anio_publicacion || sBook.anio,
       anio_publicacion: sBook.anio_publicacion || sBook.anio,
       descripcion: sBook.descripcion,
       portadaUrl: sBook.portada_url,
-      precioCompra: sBook.precio_compra,
-      precioVenta: sBook.precio_venta_estimado || sBook.precio_venta,
+      portada_url: sBook.portada_url,
+      precioCompra: sBook.precio_compra !== undefined ? parseFloat(sBook.precio_compra) : null,
+      precio_compra: sBook.precio_compra !== undefined ? parseFloat(sBook.precio_compra) : null,
+      precioVenta: sBook.precio_venta_estimado !== undefined ? parseFloat(sBook.precio_venta_estimado) : (sBook.precio_venta ? parseFloat(sBook.precio_venta) : null),
+      precio_venta_estimado: sBook.precio_venta_estimado !== undefined ? parseFloat(sBook.precio_venta_estimado) : (sBook.precio_venta ? parseFloat(sBook.precio_venta) : null),
       fechaCompra: sBook.fecha_compra,
+      fecha_compra: sBook.fecha_compra,
       realPhotos: sBook.real_photos || [],
+      real_photos: sBook.real_photos || [],
       fechaRegistro: sBook.fecha_registro || new Date().toISOString(),
+      fecha_registro: sBook.fecha_registro || new Date().toISOString(),
       user_id: currentUserId,
-      library_id: this.currentLibraryId,
-      biblioteca_id: sBook.biblioteca_id
+      library_id: biblioteca_id,
+      biblioteca_id: biblioteca_id
     };
   },
 
@@ -619,21 +674,51 @@ const storage = {
       autoresValue = autoresValue.join(', ');
     }
     
+    // Normalizar campos para manejar tanto snake_case como camelCase
+    const titulo = localBook.titulo;
+    const autor = localBook.autor || localBook.autor;
+    const isbn = localBook.isbn;
+    const editorial = localBook.editorial;
+    const anio_publicacion = localBook.anio_publicacion || localBook.anio || localBook.anio_publicacion;
+    const descripcion = localBook.descripcion || localBook.descripcion;
+    const portada_url = localBook.portadaUrl || localBook.portada_url;
+    
+    // Precios - manejar ambos formatos
+    let precio_compra = localBook.precioCompra;
+    if (precio_compra === undefined && localBook.precio_compra !== undefined) {
+      precio_compra = localBook.precio_compra;
+    }
+    
+    let precio_venta_estimado = localBook.precioVenta;
+    if (precio_venta_estimado === undefined && localBook.precio_venta_estimado !== undefined) {
+      precio_venta_estimado = localBook.precio_venta_estimado;
+    }
+    
+    // Fecha de compra - manejar ambos formatos
+    let fecha_compra = localBook.fechaCompra;
+    if (fecha_compra === undefined && localBook.fecha_compra !== undefined) {
+      fecha_compra = localBook.fecha_compra;
+    }
+    
+    const real_photos = localBook.realPhotos || localBook.real_photos || [];
+    const fecha_registro = localBook.fechaRegistro || localBook.fecha_registro || new Date().toISOString();
+    const biblioteca_id = localBook.biblioteca_id || localBook.library_id;
+    
     const supabaseBook = {
-      titulo: localBook.titulo,
-      autor: localBook.autor,
+      titulo: titulo,
+      autor: autor,
       autores: autoresValue,
-      isbn: localBook.isbn,
-      editorial: localBook.editorial,
-      anio_publicacion: localBook.anio_publicacion || localBook.anio,
-      descripcion: localBook.descripcion,
-      portada_url: localBook.portadaUrl,
-      precio_compra: localBook.precioCompra,
-      precio_venta_estimado: localBook.precio_venta_estimado || localBook.precioVenta,
-      fecha_compra: localBook.fechaCompra,
-      real_photos: localBook.realPhotos,
-      fecha_registro: localBook.fechaRegistro || new Date().toISOString(),
-      biblioteca_id: localBook.biblioteca_id || localBook.library_id
+      isbn: isbn,
+      editorial: editorial,
+      anio_publicacion: anio_publicacion,
+      descripcion: descripcion,
+      portada_url: portada_url,
+      precio_compra: precio_compra !== undefined ? parseFloat(precio_compra) : null,
+      precio_venta_estimado: precio_venta_estimado !== undefined ? parseFloat(precio_venta_estimado) : null,
+      fecha_compra: fecha_compra,
+      real_photos: real_photos,
+      fecha_registro: fecha_registro,
+      biblioteca_id: biblioteca_id
     };
     
     // Solo incluir id si existe y es un número válido (para UPDATE)
