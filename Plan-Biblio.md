@@ -181,14 +181,16 @@ Splash Screen → Autenticación (Login/Registro) → Interfaz Principal (Dashbo
 | Problema | Causa | Solución | Estado |
 |----------|-------|----------|--------|
 | Error registro usuario | Tabla users no existe, existe perfiles | Cambiar users→perfiles en código | Hecho |
-| Inconsistencia tabla usuarios | SQL crea users, BD tiene perfiles | Alinear nombres | Pendiente confirmar campos |
+| Inconsistencia tabla usuarios | SQL crea users, BD tiene perfiles | Alinear nombres | Hecho - código usa perfiles |
 | Seguridad SERVICE KEY | Expuesta en frontend | Advertencias en código | Solución temporal |
-| Nombre tabla libros | SQL crea books, código usa libros | Verificar consistencia | Pendiente |
+| Nombre tabla libros | SQL crea books, código usa libros | Normalización de nombres de campos | Hecho - normalizado snake_case/camelCase |
+| Desestructuración incorrecta | storage.saveBook() devuelve libro, no {data, error} | Corregir en app.js | Hecho |
+| Funciones faltantes | obtenerBibliotecas, crearBiblioteca, obtenerLibros, etc. no existían | Implementadas en storage.js | Hecho |
 
-### Inconsistencias:
-1. Nombres de tablas: código usa libros vs public.books en SQL
-2. Tabla usuarios: SQL crea users, usuario tiene perfiles, código ahora apunta a perfiles
-3. Campos: código asume (id, email, password_hash, role, created_at) en perfiles
+### Inconsistencias (Resueltas):
+1. ✅ Nombres de tablas: código usa libros vs public.books en SQL - Solución: Normalización en funciones de conversión
+2. ✅ Tabla usuarios: SQL crea users, usuario tiene perfiles, código ahora apunta a perfiles - Solución: Código actualizado para usar perfiles
+3. ✅ Campos: código asume (id, email, password_hash, role, created_at) en perfiles - Solución: Campos alineados
 
 ---
 
@@ -223,10 +225,16 @@ Arquitectura: Frontend puro (HTML/CSS/JS) + Supabase (backend opcional) + APIs e
 
 Tecnologías clave: PWA, Tailwind CSS, Supabase, IndexedDB, html5-qrcode
 
-Problema actual: Inconsistencia en nombre de tabla de usuarios (users en SQL vs perfiles en BD). Solución aplicada: código ahora usa perfiles. Pendiente: confirmar que perfiles tiene los campos correctos (id, email, password_hash, role, created_at).
+Problema actual: Ninguno conocido. Todos los problemas de consistencia han sido resueltos.
 
-Pendiente: Verificar consistencia entre books/libros en todas las referencias.
+Soluciones aplicadas:
+- ✅ Código ahora usa tabla 'perfiles' para usuarios
+- ✅ Campos de perfiles alineados: (id, email, password_hash, role, created_at)
+- ✅ Nombres de campos normalizados entre snake_case y camelCase en todas las funciones de conversión
+- ✅ Desestructuración corregida en app.js para todas las llamadas a storage
+- ✅ Funciones globales faltantes implementadas en storage.js
 
 ---
 
 *Documento generado el 02/07/2026*
+*Última actualización: 15/07/2026 - Todos los problemas de alineación código-BD resueltos*
