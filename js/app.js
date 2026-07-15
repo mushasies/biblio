@@ -184,30 +184,12 @@ const app = {
         this.isAdmin = perfil?.es_admin || false;
         console.log('isAdmin:', this.isAdmin);
 
-        // Cargar bibliotecas
+        // Cargar bibliotecas (esto también crea una por defecto si no hay ninguna)
         await this.cargarBibliotecas();
         console.log('Bibliotecas cargadas:', this.bibliotecas);
 
-        // Si no hay bibliotecas, crear una por defecto
-        if (this.bibliotecas.length === 0) {
-            console.log('No hay bibliotecas, creando una por defecto...');
-            const { data: nuevaBiblioteca, error } = await crearBiblioteca('Mi Biblioteca');
-            if (error) {
-                console.error('Error creando biblioteca por defecto:', error);
-                // Continuar sin biblioteca (se manejará en saveBook)
-            } else {
-                this.bibliotecas.push(nuevaBiblioteca);
-                this.currentBibliotecaId = nuevaBiblioteca.id;
-                console.log('Biblioteca por defecto creada:', nuevaBiblioteca);
-            }
-        }
-
-        // Cargar libros de la primera biblioteca
+        // Cargar libros de la biblioteca actual
         if (this.bibliotecas.length > 0) {
-            // Asegurar que currentBibliotecaId esté establecido
-            if (!this.currentBibliotecaId) {
-                this.currentBibliotecaId = this.bibliotecas[0].id;
-            }
             await this.cargarLibros();
             console.log('Libros cargados:', this.libros.length);
         }
@@ -500,10 +482,31 @@ const app = {
         const { data, error } = await obtenerBibliotecas();
         if (error) {
             console.error('cargarBibliotecas: Error al cargar bibliotecas:', error);
-            return;
         }
         this.bibliotecas = data || [];
         console.log('cargarBibliotecas: Bibliotecas cargadas:', this.bibliotecas.length);
+        
+        // Si no hay bibliotecas, crear una por defecto automaticamente
+        if (this.bibliotecas.length === 0) {
+            console.log('cargarBibliotecas: No hay bibliotecas, creando una por defecto...');
+            try {
+                const { data: nuevaBib, error: err } = await crearBiblioteca('Mi Biblioteca');
+                if (err) {
+                    console.error('cargarBibliotecas: Error creando biblioteca por defecto:', err);
+                } else {
+                    this.bibliotecas = [nuevaBib];
+                    this.currentBibliotecaId = nuevaBib.id;
+                    console.log('cargarBibliotecas: Biblioteca por defecto creada:', nuevaBib);
+                }
+            } catch (e) {
+                console.error('cargarBibliotecas: Excepcion creando biblioteca por defecto:', e);
+            }
+        } else if (!this.currentBibliotecaId) {
+            // Establecer primera biblioteca si no hay ninguna seleccionada
+            this.currentBibliotecaId = this.bibliotecas[0].id;
+            console.log('cargarBibliotecas: Biblioteca actual establecida a:', this.currentBibliotecaId);
+        }
+        
         this.actualizarSelectBiblioteca();
     },
 
