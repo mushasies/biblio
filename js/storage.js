@@ -813,3 +813,62 @@ async function obtenerLibros(bibliotecaId) {
         return { data: [], error: error };
     }
 }
+
+// Funciones para manejo de fotos de libros
+async function obtenerFotosLibro(libroId) {
+    // Por ahora, las fotos reales se guardan como array en el propio libro
+    // Esto es una simplificación - en el futuro podríamos tener una tabla separada
+    try {
+        const libro = await storage.getBookByIdIndexedDB(libroId);
+        const fotos = libro?.real_photos || libro?.realPhotos || [];
+        return { data: fotos.map((url, index) => ({ id: index, url, libro_id: libroId })), error: null };
+    } catch (error) {
+        return { data: [], error: error };
+    }
+}
+
+async function subirFotosLibro(libroId, files) {
+    // Convertir archivos a URLs (Base64 para demostración)
+    const urls = [];
+    for (const file of files) {
+        const reader = new FileReader();
+        const promise = new Promise((resolve) => {
+            reader.onload = () => {
+                urls.push({
+                    url: reader.result,
+                    name: file.name,
+                    type: file.type
+                });
+                resolve();
+            };
+            reader.readAsDataURL(file);
+        });
+        await promise;
+    }
+    return { urls, error: null };
+}
+
+async function guardarFotosLibro(libroId, urls) {
+    // Actualizar el libro con las URLs de las fotos
+    try {
+        const libro = await storage.getBookByIdIndexedDB(libroId);
+        if (!libro) throw new Error('Libro no encontrado');
+        
+        libro.real_photos = urls.map(u => u.url);
+        libro.realPhotos = urls.map(u => u.url);
+        
+        await storage.saveBookIndexedDB(libro);
+        return { data: libro, error: null };
+    } catch (error) {
+        return { data: null, error: error };
+    }
+}
+
+async function eliminarLibro(id) {
+    try {
+        await storage.deleteBook(id);
+        return { error: null };
+    } catch (error) {
+        return { error: error };
+    }
+}
