@@ -188,13 +188,28 @@ const app = {
         await this.cargarBibliotecas();
         console.log('Bibliotecas cargadas:', this.bibliotecas);
 
+        // Si no hay bibliotecas, crear una por defecto
+        if (this.bibliotecas.length === 0) {
+            console.log('No hay bibliotecas, creando una por defecto...');
+            const { data: nuevaBiblioteca, error } = await crearBiblioteca('Mi Biblioteca');
+            if (error) {
+                console.error('Error creando biblioteca por defecto:', error);
+                // Continuar sin biblioteca (se manejará en saveBook)
+            } else {
+                this.bibliotecas.push(nuevaBiblioteca);
+                this.currentBibliotecaId = nuevaBiblioteca.id;
+                console.log('Biblioteca por defecto creada:', nuevaBiblioteca);
+            }
+        }
+
         // Cargar libros de la primera biblioteca
         if (this.bibliotecas.length > 0) {
-            this.currentBibliotecaId = this.bibliotecas[0].id;
+            // Asegurar que currentBibliotecaId esté establecido
+            if (!this.currentBibliotecaId) {
+                this.currentBibliotecaId = this.bibliotecas[0].id;
+            }
             await this.cargarLibros();
             console.log('Libros cargados:', this.libros.length);
-        } else {
-            console.log('No hay bibliotecas para cargar libros');
         }
 
         this.updateUIForAuthState();
@@ -512,8 +527,8 @@ const app = {
             select.appendChild(option);
         });
 
-        // Mostrar selector solo si hay mas de una biblioteca
-        selectContainer.style.display = this.bibliotecas.length > 1 ? 'block' : 'none';
+        // Mostrar selector si hay al menos una biblioteca
+        selectContainer.style.display = this.bibliotecas.length > 0 ? 'block' : 'none';
     },
 
     async cambiarBiblioteca(bibliotecaId) {
@@ -885,9 +900,14 @@ const app = {
             return;
         }
         
-        // Validar que hay una biblioteca seleccionada
+        // Validar que hay una biblioteca seleccionada (debería siempre tener una por defecto)
         if (!formData.biblioteca_id) {
-            alert('Debe seleccionar una biblioteca');
+            alert('Error: No se pudo determinar la biblioteca. Por favor, recarga la aplicación.');
+            console.error('No hay biblioteca seleccionada:', {
+                currentBibliotecaId: this.currentBibliotecaId,
+                bibliotecas: this.bibliotecas,
+                formBibliotecaId: document.getElementById('form-biblioteca-id')?.value
+            });
             return;
         }
 
