@@ -114,15 +114,39 @@ Splash Screen → Autenticación (Login/Registro) → Interfaz Principal (Dashbo
 - real_photos (TEXT[] - array de imágenes Base64)
 - fecha_registro (TIMESTAMP, default NOW())
 
-**Tabla perfiles (o users - PROBLEMA ACTUAL):**
+**Tabla perfiles (o users):**
 - id (UUID, primary key, gen_random_uuid())
 - email (TEXT, not null, unique)
 - password_hash (TEXT, not null) - SHA-256
 - role (TEXT, default user) - user o admin
 - created_at (TIMESTAMP, default NOW())
 
-**Índices:** idx_books_user_id, idx_users_email
-**RLS:** Activado con políticas de acceso por usuario
+**Tabla bibliotecas (libraries):**
+- id (BIGINT, primary key, identity)
+- nombre (TEXT, not null)
+- user_id (UUID, referencia a auth.users)
+- es_publica (BOOLEAN, default false)
+- created_at (TIMESTAMP, default NOW())
+
+**Tabla libros (books o libros):**
+- id (BIGINT, primary key, identity)
+- user_id (UUID, referencia a auth.users)
+- biblioteca_id (BIGINT, referencia a bibliotecas)
+- titulo (TEXT, not null)
+- autor (TEXT)
+- isbn (TEXT)
+- editorial (TEXT)
+- anio (TEXT)
+- descripcion (TEXT)
+- portada_url (TEXT)
+- precio_compra (NUMERIC(10,2))
+- precio_venta (NUMERIC(10,2))
+- fecha_compra (DATE)
+- real_photos (TEXT[] - array de imágenes Base64)
+- fecha_registro (TIMESTAMP, default NOW())
+
+**Índices:** idx_books_user_id, idx_users_email, idx_bibliotecas_user_id
+**RLS:** Activado con políticas de acceso por usuario en todas las tablas
 
 ### Local (IndexedDB)
 - Propósito: funcionamiento 100% offline
