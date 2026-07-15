@@ -892,6 +892,7 @@ const app = {
 
     async saveBook(event) {
         event.preventDefault();
+        console.log('app.saveBook llamado, this:', this, 'this === app:', this === app);
 
         const formData = {
             id: document.getElementById('form-book-id').value || undefined,
