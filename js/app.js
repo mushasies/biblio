@@ -903,9 +903,9 @@ const app = {
         // Subir fotos reales si las hay
         const fotoInput = document.getElementById('form-real-photo-input');
         if (fotoInput?.files?.length > 0) {
-            const { urls } = await subirFotosLibro(libro.id, Array.from(fotoInput.files));
-            if (urls.length > 0) {
-                await guardarFotosLibro(libro.id, urls);
+            const result = await subirFotosLibro(libro.id, Array.from(fotoInput.files));
+            if (result.urls && result.urls.length > 0) {
+                await guardarFotosLibro(libro.id, result.urls);
             }
         }
 
