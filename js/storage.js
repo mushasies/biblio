@@ -3,6 +3,7 @@ const storage = {
   dbVersion: 3,
   storeName: 'libros',
   libraryStoreName: 'bibliotecas',
+  supabaseStoreName: 'books',
   db: null,
   isSupabaseEnabled: false,
   supabaseClient: null,
@@ -330,7 +331,7 @@ const storage = {
         if (!client) throw new Error('Cliente no disponible');
         // NO filtrar por library_id ni user_id en Supabase (no existen esos campos allí)
         // Cargamos todos y luego filtramos localmente
-        const { data, error } = await client.from(this.storeName).select('*').order('fechaRegistro', { ascending: false });
+        const { data, error } = await client.from(this.supabaseStoreName).select('*').order('fechaRegistro', { ascending: false });
         if (error) throw error;
         
         // Convertir y filtrar localmente
@@ -363,7 +364,7 @@ const storage = {
       try {
         const client = this.supabaseClient || auth.getClient();
         if (!client) throw new Error('Cliente no disponible');
-        const { data, error } = await client.from(this.storeName).select('*').order('fechaRegistro', { ascending: false });
+        const { data, error } = await client.from(this.supabaseStoreName).select('*').order('fechaRegistro', { ascending: false });
         if (error) throw error;
         await this.syncBooksToIndexedDB(data);
         return data.map(this.supabaseToLocalBook);
@@ -399,7 +400,7 @@ const storage = {
         const client = this.supabaseClient || auth.getClient();
         if (!client) throw new Error('Cliente no disponible');
         // NO filtrar por user_id en Supabase (no existe ese campo allí)
-        const { data, error } = await client.from(this.storeName).select('*').eq('id', id).single();
+        const { data, error } = await client.from(this.supabaseStoreName).select('*').eq('id', id).single();
         if (error) throw error;
         return data ? this.supabaseToLocalBook(data) : null;
       } catch (error) {
@@ -507,11 +508,11 @@ const storage = {
         const client = this.supabaseClient || auth.getClient();
         if (!client) throw new Error('Cliente no disponible');
         const supabaseBook = this.localToSupabaseBook(book);
-        console.log('Guardando en Supabase:', this.storeName, supabaseBook);
+        console.log('Guardando en Supabase:', this.supabaseStoreName, supabaseBook);
         let result;
         if (book.id !== undefined && book.id !== null && book.id !== '' && !isNaN(book.id)) {
           console.log('Actualizando libro con id:', book.id);
-          const { data, error } = await client.from(this.storeName).update(supabaseBook).eq('id', book.id).select();
+          const { data, error } = await client.from(this.supabaseStoreName).update(supabaseBook).eq('id', book.id).select();
           if (error) {
             console.error('Error al actualizar en Supabase:', error);
             throw error;
@@ -519,7 +520,7 @@ const storage = {
           result = this.supabaseToLocalBook(data[0]);
         } else {
           console.log('Insertando nuevo libro');
-          const { data, error } = await client.from(this.storeName).insert(supabaseBook).select();
+          const { data, error } = await client.from(this.supabaseStoreName).insert(supabaseBook).select();
           if (error) {
             console.error('Error al insertar en Supabase:', error);
             throw error;
@@ -578,7 +579,7 @@ const storage = {
         if (!client) throw new Error('Cliente no disponible');
         // NO filtrar por user_id en Supabase (no existe ese campo allí)
         // Confiamos en que el libro pertence al usuario por el contexto local
-        const { error } = await client.from(this.storeName).delete().eq('id', id);
+        const { error } = await client.from(this.supabaseStoreName).delete().eq('id', id);
         if (error) throw error;
         await this.deleteBookIndexedDB(id);
         return true;
