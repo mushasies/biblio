@@ -732,3 +732,84 @@ const storage = {
 
 // Exponer el objeto storage globalmente
 window.storage = storage;
+
+// Funciones globales para compatibilidad con app.js
+// Estas funciones usan el contexto de app (app.supabase, app.currentUser)
+async function obtenerBibliotecas() {
+    if (typeof app === 'undefined' || !app.supabase || !app.currentUser) {
+        // Si no hay supabase, devolver bibliotecas de IndexedDB
+        try {
+            const libs = await storage.getAllLibrariesIndexedDB();
+            return { data: libs, error: null };
+        } catch (error) {
+            return { data: [], error: error };
+        }
+    }
+    
+    try {
+        const { data, error } = await app.supabase
+            .from('bibliotecas')
+            .select('*')
+            .eq('user_id', app.currentUser.id);
+        
+        if (error) throw error;
+        return { data: data || [], error: null };
+    } catch (error) {
+        console.error('Error obteniendo bibliotecas:', error);
+        return { data: [], error: error };
+    }
+}
+
+async function crearBiblioteca(nombre) {
+    if (typeof app === 'undefined' || !app.supabase || !app.currentUser) {
+        // Crear localmente
+        try {
+            const newLib = await storage.createLibrary(nombre, app.currentUser?.id);
+            return { data: newLib, error: null };
+        } catch (error) {
+            return { data: null, error: error };
+        }
+    }
+    
+    try {
+        const { data, error } = await app.supabase
+            .from('bibliotecas')
+            .insert([{ nombre: nombre.trim(), user_id: app.currentUser.id }])
+            .select();
+        
+        if (error) throw error;
+        return { data: data[0], error: null };
+    } catch (error) {
+        console.error('Error creando biblioteca:', error);
+        return { data: null, error: error };
+    }
+}
+
+async function obtenerLibros(bibliotecaId) {
+    if (typeof app === 'undefined' || !app.supabase || !app.currentUser) {
+        // Obtener de IndexedDB
+        try {
+            const books = await storage.getAllBooksIndexedDB();
+            // Filtrar por biblioteca
+            const filtered = books.filter(b => b.library_id === bibliotecaId || b.biblioteca_id === bibliotecaId);
+            return { data: filtered, error: null };
+        } catch (error) {
+            return { data: [], error: error };
+        }
+    }
+    
+    try {
+        const { data, error } = await app.supabase
+            .from('libros')
+            .select('*')
+            .eq('biblioteca_id', bibliotecaId)
+            .eq('user_id', app.currentUser.id)
+            .order('fecha_registro', { ascending: false });
+        
+        if (error) throw error;
+        return { data: data || [], error: null };
+    } catch (error) {
+        console.error('Error obteniendo libros:', error);
+        return { data: [], error: error };
+    }
+}
