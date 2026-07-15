@@ -512,8 +512,8 @@ const storage = {
       const store = transaction.objectStore(this.storeName);
       
       // Asegurar que el id es un número válido para IndexedDB
-      // Si el libro tiene id pero no es un número, eliminarlo para que autoIncrement lo genere
-      if (book.id !== undefined && book.id !== null && typeof book.id !== 'number') {
+      // Si el libro tiene id pero no es un número válido, eliminarlo para que autoIncrement lo genere
+      if (book.id === undefined || book.id === null || book.id === '' || typeof book.id !== 'number' || isNaN(book.id)) {
         console.warn('ID inválido para IndexedDB, se generará uno nuevo:', book.id);
         delete book.id;
       }
