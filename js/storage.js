@@ -428,6 +428,8 @@ const storage = {
   },
 
   async saveBook(book) {
+    console.log('storage.saveBook() llamado con:', book);
+    
     // Normalizar nombres de campos para manejar tanto snake_case como camelCase
     // Precios
     if (book.precio_compra !== undefined) {
@@ -540,7 +542,9 @@ const storage = {
         return this.saveBookIndexedDB(book);
       }
     } else {
-      return this.saveBookIndexedDB(book);
+      const result = await this.saveBookIndexedDB(book);
+      console.log('storage.saveBook() devuelve (solo IndexedDB):', result);
+      return result;
     }
   },
 
