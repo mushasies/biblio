@@ -493,6 +493,17 @@ const app = {
                 const { data: nuevaBib, error: err } = await crearBiblioteca('Mi Biblioteca');
                 if (err) {
                     console.error('cargarBibliotecas: Error creando biblioteca por defecto:', err);
+                    // Intentar crear localmente si falla en Supabase
+                    try {
+                        console.log('cargarBibliotecas: Intentando crear biblioteca localmente...');
+                        const newLib = await storage.createLibrary('Mi Biblioteca', this.currentUser?.id);
+                        this.bibliotecas = [newLib];
+                        this.currentBibliotecaId = newLib.id;
+                        storage.saveCurrentLibrary(newLib);
+                        console.log('cargarBibliotecas: Biblioteca por defecto creada LOCALMENTE:', newLib);
+                    } catch (localErr) {
+                        console.error('cargarBibliotecas: Error creando biblioteca localmente:', localErr);
+                    }
                 } else {
                     this.bibliotecas = [nuevaBib];
                     this.currentBibliotecaId = nuevaBib.id;
