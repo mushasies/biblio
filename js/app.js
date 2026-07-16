@@ -589,10 +589,14 @@ const app = {
     },
 
     renderizarLibros() {
+        console.log('renderizarLibros llamado, this.libros:', this.libros);
         const booksGrid = document.getElementById('books-grid');
         const emptyState = document.getElementById('empty-state');
 
-        if (!booksGrid || !emptyState) return;
+        if (!booksGrid || !emptyState) {
+            console.log('renderizarLibros: booksGrid o emptyState no encontrados');
+            return;
+        }
 
         if (this.libros.length === 0) {
             booksGrid.classList.add('hidden');
@@ -954,6 +958,8 @@ const app = {
         // Normalizar biblioteca_id para asegurar consistencia
         const libroBibliotecaId = libro.biblioteca_id || libro.library_id || formData.biblioteca_id || formData.library_id;
         console.log('app.saveBook: libroBibliotecaId:', libroBibliotecaId, 'this.bibliotecas:', this.bibliotecas);
+        console.log('app.saveBook: formData.id =', formData.id, 'typeof =', typeof formData.id, 'boolean =', !!formData.id);
+        console.log('app.saveBook: libro.id =', libro.id, 'typeof =', typeof libro.id);
         
         if (formData.id) {
             // Actualizar libro existente
@@ -1077,11 +1083,16 @@ const app = {
 
             if (googleData.totalItems > 0) {
                 const book = googleData.items[0].volumeInfo;
+                // Normalizar publisher: puede ser string o array
+                let editorialValue = book.publisher || '';
+                if (Array.isArray(editorialValue)) {
+                    editorialValue = editorialValue[0] || '';
+                }
                 libroData = {
                     titulo: book.title || '',
                     autores: book.authors || [],
                     isbn: isbn,
-                    editorial: book.publisher || '',
+                    editorial: editorialValue,
                     anio_publicacion: book.publishedDate ? book.publishedDate.substring(0, 4) : '',
                     descripcion: book.description || '',
                     portada_url: book.imageLinks?.thumbnail || book.imageLinks?.smallThumbnail || ''
@@ -1095,11 +1106,20 @@ const app = {
                 const olKey = `ISBN:${isbn}`;
                 if (openLibraryData[olKey]) {
                     const book = openLibraryData[olKey];
+                    // Normalizar publishers: puede ser string, array, u objeto
+                    let editorialValue = '';
+                    if (book.publishers) {
+                        if (Array.isArray(book.publishers)) {
+                            editorialValue = book.publishers[0] || '';
+                        } else if (typeof book.publishers === 'string') {
+                            editorialValue = book.publishers;
+                        }
+                    }
                     libroData = {
                         titulo: book.title || '',
                         autores: book.authors ? book.authors.map(a => a.name) : [],
                         isbn: isbn,
-                        editorial: book.publishers ? book.publishers[0] : '',
+                        editorial: editorialValue,
                         anio_publicacion: book.publish_date ? book.publish_date.substring(0, 4) : '',
                         descripcion: book.notes ? book.notes.value : '',
                         portada_url: book.cover ? book.cover.medium : book.cover?.small || ''
