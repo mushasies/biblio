@@ -957,23 +957,20 @@ const app = {
         // Actualizar lista local
         // Normalizar biblioteca_id para asegurar consistencia
         const libroBibliotecaId = libro.biblioteca_id || libro.library_id || formData.biblioteca_id || formData.library_id;
-        console.log('app.saveBook: libroBibliotecaId:', libroBibliotecaId, 'this.bibliotecas:', this.bibliotecas);
-        console.log('app.saveBook: formData.id =', formData.id, 'typeof =', typeof formData.id, 'boolean =', !!formData.id);
-        console.log('app.saveBook: libro.id =', libro.id, 'typeof =', typeof libro.id);
+        const bibliotecaNombre = this.bibliotecas.find(b => b.id === libroBibliotecaId)?.nombre || 'Desconocida';
         
         if (formData.id) {
             // Actualizar libro existente
             const index = this.libros.findIndex(l => l.id === formData.id);
             if (index !== -1) {
                 this.libros[index] = { ...libro, bibliotecas: this.libros[index].bibliotecas };
-                console.log('app.saveBook: Libro actualizado en this.libros[', index, ']', this.libros[index]);
+            } else {
+                // Libro no encontrado en lista, anadirlo
+                this.libros.unshift({ ...libro, bibliotecas: { nombre: bibliotecaNombre } });
             }
         } else {
             // Anadir nuevo libro
-            const bibliotecaNombre = this.bibliotecas.find(b => b.id === libroBibliotecaId)?.nombre || 'Desconocida';
-            console.log('app.saveBook: Añadiendo nuevo libro con biblioteca:', bibliotecaNombre);
             this.libros.unshift({ ...libro, bibliotecas: { nombre: bibliotecaNombre } });
-            console.log('app.saveBook: this.libros después de unshift:', this.libros);
         }
 
         console.log('app.saveBook: Llamando a renderizarLibros()');
