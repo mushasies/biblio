@@ -46,6 +46,10 @@ const app = {
             // Inicializar Supabase
             await this.initSupabase();
             
+            // Inicializar Storage (IndexedDB)
+            await storage.init();
+            console.log('app.init() - Storage inicializado');
+            
             // Verificar que auth esté disponible
             if (typeof auth === 'undefined' || auth === null) {
                 console.error('ERROR: auth no está definido. Esperando...');
