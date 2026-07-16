@@ -709,6 +709,17 @@ const storage = {
     const fecha_registro = localBook.fechaRegistro || localBook.fecha_registro || new Date().toISOString();
     const biblioteca_id = localBook.biblioteca_id || localBook.library_id;
     
+    // Convertir biblioteca_id a número si es string
+    let bibliotecaIdNum = biblioteca_id;
+    if (typeof biblioteca_id === 'string' && biblioteca_id.trim() !== '') {
+        bibliotecaIdNum = parseInt(biblioteca_id, 10);
+        if (isNaN(bibliotecaIdNum)) {
+            bibliotecaIdNum = null;
+        }
+    } else if (typeof biblioteca_id !== 'number' || isNaN(biblioteca_id)) {
+        bibliotecaIdNum = null;
+    }
+    
     const supabaseBook = {
       titulo: titulo,
       autor: autor,
@@ -723,7 +734,7 @@ const storage = {
       fecha_compra: fecha_compra,
       real_photos: real_photos,
       fecha_registro: fecha_registro,
-      biblioteca_id: biblioteca_id
+      biblioteca_id: bibliotecaIdNum
     };
     
     // Solo incluir id si existe y es un número válido (para UPDATE)

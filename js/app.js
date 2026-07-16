@@ -46,10 +46,6 @@ const app = {
             // Inicializar Supabase
             await this.initSupabase();
             
-            // Inicializar Storage (IndexedDB)
-            await storage.init();
-            console.log('app.init() - Storage inicializado');
-            
             // Verificar que auth esté disponible
             if (typeof auth === 'undefined' || auth === null) {
                 console.error('ERROR: auth no está definido. Esperando...');
@@ -63,6 +59,18 @@ const app = {
             // Inicializar auth (esto también inicializa el cliente de Supabase en auth.js)
             // NOTA: auth.init() puede disparar el evento showSupabaseConfig si no hay URL
             await auth.init();
+            
+            // Inicializar Storage (IndexedDB) con cliente Supabase si está disponible
+            const supabaseClient = auth.getClient() || this.supabase;
+            await storage.init(supabaseClient);
+            console.log('app.init() - Storage inicializado con Supabase:', !!supabaseClient);
+            
+            // Activar sincronización con Supabase si hay cliente disponible
+            if (supabaseClient) {
+                storage.isSupabaseEnabled = true;
+                storage.supabaseClient = supabaseClient;
+                console.log('app.init() - Supabase habilitado en storage');
+            }
             
             // Usar el cliente de auth si está disponible
             if (auth.getClient()) {
@@ -171,6 +179,14 @@ const app = {
             this.supabase = auth.getClient();
             console.log('app.supabase obtenido de auth.getClient()');
         }
+        
+        // Asegurar que storage tenga el cliente Supabase y esté habilitado
+        if (this.supabase && !storage.isSupabaseEnabled) {
+            storage.isSupabaseEnabled = true;
+            storage.supabaseClient = this.supabase;
+            console.log('onUserAuthenticated: Supabase habilitado en storage');
+        }
+        
         console.log('app.supabase disponible:', !!this.supabase);
         console.log('app.currentUser establecido:', this.currentUser);
 
